@@ -279,6 +279,10 @@
   <!-- DASHBOARD TAB -->
   <div id="tab-dashboard" class="tab-content active">
     <div class="summary-grid" id="summaryGrid"></div>
+    <div style="margin-bottom:1.5rem;">
+      <div class="section-header">Annual Fleet Maintenance Cost</div>
+      <div id="dashYearChart"></div>
+    </div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; flex-wrap:wrap;">
       <div>
         <div class="section-header">Fleet Health by Vehicle</div>
@@ -627,6 +631,44 @@ function renderDashboard() {
       <div style="font-size:0.75rem;color:var(--muted);min-width:80px;text-align:right;">${v.year} ${v.make}</div>
     </div>
   `).join('');
+
+  // Annual fleet cost chart
+  const fleetByYear = {};
+  vehicles.forEach(v => {
+    (v.records || []).forEach(r => {
+      if (!r.date || r.date.length < 4) return;
+      const yr = parseInt(r.date.substring(0, 4));
+      if (isNaN(yr) || yr < 2018) return;
+      fleetByYear[yr] = (fleetByYear[yr] || 0) + (r.price || 0);
+    });
+  });
+  const chartYears = Object.keys(fleetByYear).map(Number).sort();
+  const maxSpend = Math.max(...Object.values(fleetByYear), 1);
+  const CHART_H = 150;
+  const fmtK = n => n >= 10000 ? '$' + Math.round(n / 1000) + 'k' : '$' + Math.round(n).toLocaleString();
+
+  document.getElementById('dashYearChart').innerHTML = chartYears.length === 0
+    ? '<div class="no-records">No annual data available.</div>'
+    : `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;">
+        <div style="display:flex;align-items:flex-end;gap:10px;height:${CHART_H}px;margin-bottom:0.4rem;">
+          ${chartYears.map(yr => {
+            const spend = fleetByYear[yr];
+            const barH = Math.max(4, Math.round((spend / maxSpend) * (CHART_H - 28)));
+            const isCurrent = yr === CURRENT_YEAR;
+            const barColor = isCurrent ? 'var(--accent)' : 'var(--accent2)';
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">
+              <div style="font-size:0.68rem;color:${isCurrent ? 'var(--accent)' : 'var(--muted)'};margin-bottom:4px;font-weight:${isCurrent ? 600 : 400};">${fmtK(spend)}</div>
+              <div style="width:100%;height:${barH}px;background:${barColor};border-radius:3px 3px 0 0;opacity:${isCurrent ? 0.85 : 1};position:relative;">
+                <div class="bar-tooltip">$${Math.round(spend).toLocaleString()}${isCurrent ? ' (YTD)' : ''}</div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div style="display:flex;gap:10px;">
+          ${chartYears.map(yr => `<div style="flex:1;text-align:center;font-size:0.7rem;color:${yr === CURRENT_YEAR ? 'var(--accent)' : 'var(--muted)'};">${yr}${yr === CURRENT_YEAR ? '*' : ''}</div>`).join('')}
+        </div>
+        ${chartYears.includes(CURRENT_YEAR) ? '<div style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;">* Current year (partial)</div>' : ''}
+      </div>`;
 }
 
 // ============================================================
