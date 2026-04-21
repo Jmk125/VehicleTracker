@@ -823,11 +823,12 @@ function renderTable() {
 // RENDER ALERTS
 // ============================================================
 function renderAlerts() {
+  // ---- Lifecycle alerts (existing) ----
   const stats = vehicles.map(v => ({ v, s: computeStats(v) })).filter(x => x.s.statusColor !== 'green');
   stats.sort((a, b) => b.s.lifePctUsed - a.s.lifePctUsed);
 
-  const html = stats.length === 0
-    ? '<div class="no-records">🎉 No vehicles currently require attention.</div>'
+  const lifecycleHtml = stats.length === 0
+    ? '<div class="no-records" style="padding:1rem;">🎉 No vehicles currently require attention.</div>'
     : stats.map(({ v, s }) => {
         const icon = s.statusColor === 'red' ? '🔴' : '🟡';
         const reason = s.lifePctUsed >= 1
@@ -845,7 +846,53 @@ function renderAlerts() {
         </div>`;
       }).join('');
 
-  document.getElementById('alertsPanel').innerHTML = `<div class="risk-panel">${html}</div>`;
+  // ---- Oil change alerts ----
+  const sixMonthsAgo = new Date(TODAY.getFullYear(), TODAY.getMonth() - 6, TODAY.getDate());
+
+  const oilOverdue = vehicles.map(v => {
+    const oilRecs = (v.records || [])
+      .filter(r => r.date && r.date.length >= 8 && /oil/i.test(r.service))
+      .sort((a, b) => b.date.localeCompare(a.date));
+    const last = oilRecs[0] || null;
+    const overdue = !last || new Date(last.date) < sixMonthsAgo;
+    return overdue ? { v, last } : null;
+  }).filter(Boolean);
+
+  // Sort: no record first, then oldest-last-change first
+  oilOverdue.sort((a, b) => {
+    if (!a.last && !b.last) return 0;
+    if (!a.last) return -1;
+    if (!b.last) return 1;
+    return a.last.date.localeCompare(b.last.date);
+  });
+
+  const oilHtml = oilOverdue.length === 0
+    ? '<div class="no-records" style="padding:1rem;">✅ All vehicles have a recorded oil change within the last 6 months.</div>'
+    : oilOverdue.map(({ v, last }) => {
+        const monthsAgo = last
+          ? Math.round((TODAY - new Date(last.date)) / (1000 * 60 * 60 * 24 * 30.44))
+          : null;
+        const sub = last
+          ? `Last recorded: ${last.date} — ${monthsAgo} month${monthsAgo !== 1 ? 's' : ''} ago`
+          : 'No oil change on record';
+        const color = (!last || monthsAgo > 12) ? 'var(--red)' : 'var(--yellow)';
+        const badge = last ? `${monthsAgo} mo ago` : 'No record';
+        return `<div class="risk-item" onclick="openDetail('${v.id}')">
+          <div class="risk-icon">🔧</div>
+          <div class="risk-text">
+            <strong>${v.year} ${v.make} ${v.model} — ${v.assigned_to}</strong>
+            <span>${sub}</span>
+          </div>
+          <div class="risk-cost" style="color:${color}">${badge}</div>
+        </div>`;
+      }).join('');
+
+  document.getElementById('alertsPanel').innerHTML = `
+    <div class="section-header">Vehicles Requiring Attention — Lifecycle</div>
+    <div class="risk-panel" style="margin-bottom:1.5rem;">${lifecycleHtml}</div>
+    <div class="section-header">Overdue Oil Changes (6+ Months)</div>
+    <div class="risk-panel">${oilHtml}</div>
+  `;
 }
 
 // ============================================================
