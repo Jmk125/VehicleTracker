@@ -279,11 +279,7 @@
   <!-- DASHBOARD TAB -->
   <div id="tab-dashboard" class="tab-content active">
     <div class="summary-grid" id="summaryGrid"></div>
-    <div style="margin-bottom:1.5rem;">
-      <div class="section-header">Annual Fleet Maintenance Cost</div>
-      <div id="dashYearChart"></div>
-    </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; flex-wrap:wrap;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; flex-wrap:wrap; margin-bottom:1.5rem;">
       <div>
         <div class="section-header">Fleet Health by Vehicle</div>
         <div id="dashHealthList"></div>
@@ -292,6 +288,11 @@
         <div class="section-header">Highest Annual Maintenance Cost</div>
         <div id="dashCostList"></div>
       </div>
+    </div>
+    <div>
+      <div class="section-header">Annual Fleet Maintenance Cost</div>
+      <div id="dashYearChart"></div>
+      <div id="dashYearBreakdown"></div>
     </div>
   </div>
 
@@ -650,6 +651,7 @@ function renderDashboard() {
   document.getElementById('dashYearChart').innerHTML = chartYears.length === 0
     ? '<div class="no-records">No annual data available.</div>'
     : `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.25rem 1.5rem;">
+        <div style="font-size:0.72rem;color:var(--muted);margin-bottom:0.75rem;">Click a bar to see vehicle breakdown</div>
         <div style="display:flex;align-items:flex-end;gap:10px;height:${CHART_H}px;margin-bottom:0.4rem;">
           ${chartYears.map(yr => {
             const spend = fleetByYear[yr];
@@ -658,7 +660,9 @@ function renderDashboard() {
             const barColor = isCurrent ? 'var(--accent)' : 'var(--accent2)';
             return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">
               <div style="font-size:0.68rem;color:${isCurrent ? 'var(--accent)' : 'var(--muted)'};margin-bottom:4px;font-weight:${isCurrent ? 600 : 400};">${fmtK(spend)}</div>
-              <div style="width:100%;height:${barH}px;background:${barColor};border-radius:3px 3px 0 0;opacity:${isCurrent ? 0.85 : 1};position:relative;">
+              <div data-chart-bar="${yr}" onclick="showYearBreakdown(${yr})"
+                style="width:100%;height:${barH}px;background:${barColor};border-radius:3px 3px 0 0;position:relative;cursor:pointer;transition:opacity 0.15s;"
+                onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
                 <div class="bar-tooltip">$${Math.round(spend).toLocaleString()}${isCurrent ? ' (YTD)' : ''}</div>
               </div>
             </div>`;
@@ -669,6 +673,79 @@ function renderDashboard() {
         </div>
         ${chartYears.includes(CURRENT_YEAR) ? '<div style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;">* Current year (partial)</div>' : ''}
       </div>`;
+}
+
+// ============================================================
+// YEAR BREAKDOWN
+// ============================================================
+let selectedChartYear = null;
+
+function showYearBreakdown(yr) {
+  const breakdown = document.getElementById('dashYearBreakdown');
+  if (!breakdown) return;
+
+  // Toggle off if same bar clicked again
+  if (selectedChartYear === yr) {
+    selectedChartYear = null;
+    breakdown.innerHTML = '';
+    document.querySelectorAll('[data-chart-bar]').forEach(el => { el.style.outline = 'none'; });
+    return;
+  }
+  selectedChartYear = yr;
+
+  // Highlight selected bar
+  document.querySelectorAll('[data-chart-bar]').forEach(el => {
+    el.style.outline = parseInt(el.getAttribute('data-chart-bar')) === yr
+      ? '2px solid var(--text)' : 'none';
+    el.style.outlineOffset = '2px';
+  });
+
+  // Build per-vehicle totals for the year
+  const rows = [];
+  vehicles.forEach(v => {
+    const recs = (v.records || []).filter(r => r.date && r.date.startsWith(String(yr)));
+    if (recs.length === 0) return;
+    const total = recs.reduce((a, r) => a + (r.price || 0), 0);
+    rows.push({ v, recs, total });
+  });
+  rows.sort((a, b) => b.total - a.total);
+  const grandTotal = rows.reduce((a, r) => a + r.total, 0);
+
+  breakdown.innerHTML = `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.25rem;margin-top:1rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <div class="section-header" style="margin-bottom:0;">${yr} Cost Breakdown by Vehicle</div>
+        <button class="btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.6rem;" onclick="showYearBreakdown(${yr})">✕ Close</button>
+      </div>
+      <div class="vehicle-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Vehicle</th>
+              <th>Assigned To</th>
+              <th style="text-align:right;"># Records</th>
+              <th style="text-align:right;">${yr} Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(({ v, recs, total }) => `
+              <tr onclick="openDetail('${v.id}')" style="cursor:pointer;">
+                <td>${v.year} ${v.make} ${v.model}</td>
+                <td style="color:var(--muted);">${v.assigned_to || v.plate}</td>
+                <td style="text-align:right;color:var(--muted);">${recs.length}</td>
+                <td style="text-align:right;font-family:var(--condensed);font-weight:700;color:${total > 5000 ? 'var(--red)' : total > 2000 ? 'var(--yellow)' : 'var(--text)'};">$${Math.round(total).toLocaleString()}</td>
+              </tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" style="font-size:0.8rem;color:var(--muted);padding-top:0.6rem;">${rows.length} vehicle${rows.length !== 1 ? 's' : ''}</td>
+              <td></td>
+              <td style="text-align:right;font-family:var(--condensed);font-size:1.1rem;font-weight:700;color:var(--accent);padding-top:0.6rem;">$${Math.round(grandTotal).toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>`;
 }
 
 // ============================================================
