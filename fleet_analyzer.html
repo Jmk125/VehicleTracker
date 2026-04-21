@@ -887,8 +887,10 @@ function openDetail(id) {
     <div class="repair-tool">
       <div class="repair-tool-title">⚙ Repair Decision Calculator</div>
       <div style="font-size:0.82rem;color:var(--muted);margin-bottom:0.75rem;">
-        Projected remaining maintenance: <strong style="color:var(--text);">$${s.projected_cost.toLocaleString()}</strong> over ~${s.yearsLeft} yrs
-        ${v.cost_new ? `· Original cost: <strong style="color:var(--text);">$${v.cost_new.toLocaleString()}</strong>` : ''}
+        ${s.lifePctUsed >= 1
+          ? `<span style="color:var(--red);font-weight:600;">Vehicle is at/past lifecycle threshold.</span> Calculator uses a 5-year maintenance look-ahead ($${(s.avg_annual * 5).toLocaleString()} estimated).`
+          : `Projected remaining maintenance: <strong style="color:var(--text);">$${s.projected_cost.toLocaleString()}</strong> over ~${s.yearsLeft} yrs`}
+        ${v.cost_new ? ` · Original cost: <strong style="color:var(--text);">$${v.cost_new.toLocaleString()}</strong>` : ''}
       </div>
       <div class="repair-inputs">
         <div class="repair-field">
@@ -904,19 +906,37 @@ function openDetail(id) {
       <div class="repair-result" id="repairResult_${id}"></div>
     </div>`;
 
-  // Recent maintenance
-  const records = [...(v.records || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const histHTML = records.length > 0
+  // Recent maintenance — preserve original indices for editing
+  const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inputStyle = 'background:var(--surface);border:1px solid var(--border);color:var(--text);padding:0.2rem 0.4rem;border-radius:4px;font-size:0.8rem;outline:none;';
+  const recordsIndexed = (v.records || []).map((r, i) => ({ r, i })).sort((a, b) => (b.r.date || '').localeCompare(a.r.date || ''));
+  const histHTML = recordsIndexed.length > 0
     ? `<div class="maint-table-wrap"><table class="maint-table">
-        <thead><tr><th>Date</th><th>Mileage</th><th>Service</th><th>Cost</th><th>Invoice</th></tr></thead>
+        <thead><tr><th>Date</th><th>Mileage</th><th>Service</th><th>Cost</th><th>Invoice</th><th></th></tr></thead>
         <tbody>
-          ${records.map(r => `<tr>
-            <td style="white-space:nowrap;">${r.date || '—'}</td>
-            <td style="font-family:monospace;">${r.mileage ? r.mileage.toLocaleString() : '—'}</td>
-            <td>${r.service}</td>
-            <td style="font-family:var(--condensed);font-weight:600;color:${r.price > 2000 ? 'var(--red)' : r.price > 500 ? 'var(--yellow)' : 'var(--text)'}">$${r.price.toLocaleString()}</td>
-            <td style="color:var(--muted);font-size:0.78rem;">${r.invoice || '—'}</td>
-          </tr>`).join('')}
+          ${recordsIndexed.map(({ r, i }) => {
+            if (editingRecord.vehicleId === id && editingRecord.idx === i) {
+              return `<tr style="background:rgba(245,158,11,0.06);">
+                <td><input type="date" id="er_date" value="${esc(r.date)}" style="${inputStyle}border-color:var(--accent);width:132px;"></td>
+                <td><input type="number" id="er_miles" value="${r.mileage || ''}" placeholder="—" style="${inputStyle}width:88px;"></td>
+                <td><input type="text" id="er_svc" value="${esc(r.service)}" style="${inputStyle}width:100%;min-width:160px;"></td>
+                <td><input type="number" id="er_cost" value="${r.price || ''}" step="0.01" style="${inputStyle}width:88px;"></td>
+                <td><input type="text" id="er_inv" value="${esc(r.invoice)}" style="${inputStyle}width:88px;"></td>
+                <td style="white-space:nowrap;">
+                  <button class="btn-primary" style="font-size:0.72rem;padding:0.2rem 0.5rem;" onclick="saveRecordEdit('${id}',${i})">Save</button>
+                  <button class="btn-secondary" style="font-size:0.72rem;padding:0.2rem 0.5rem;margin-left:0.25rem;" onclick="cancelRecordEdit()">Cancel</button>
+                </td>
+              </tr>`;
+            }
+            return `<tr>
+              <td style="white-space:nowrap;">${r.date || '—'}</td>
+              <td style="font-family:monospace;">${r.mileage ? r.mileage.toLocaleString() : '—'}</td>
+              <td>${r.service}</td>
+              <td style="font-family:var(--condensed);font-weight:600;color:${r.price > 2000 ? 'var(--red)' : r.price > 500 ? 'var(--yellow)' : 'var(--text)'}">$${r.price.toLocaleString()}</td>
+              <td style="color:var(--muted);font-size:0.78rem;">${r.invoice || '—'}</td>
+              <td><button class="btn-secondary" style="font-size:0.72rem;padding:0.2rem 0.5rem;" onclick="editRecord('${id}',${i})">Edit</button></td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table></div>`
     : '<div class="no-records">No maintenance records.</div>';
@@ -965,7 +985,7 @@ function openDetail(id) {
       ${years.map(yr => `<span>${yr}: $${Math.round(yearlyTotals[yr]).toLocaleString()}</span>`).join('')}
     </div>
 
-    <div class="section-header" style="margin-bottom:0.75rem;">Service Records (${records.length})</div>
+    <div class="section-header" style="margin-bottom:0.75rem;">Service Records (${recordsIndexed.length})</div>
     ${histHTML}
 
     <div class="section-header" style="margin-top:1.5rem;margin-bottom:0.75rem;">Add Service Record</div>
@@ -1007,22 +1027,43 @@ function calcRepair(id) {
   const replace = parseFloat(document.getElementById(`replaceCost_${id}`).value) || 0;
   if (!repair) return;
 
-  const totalIfRepair = repair + s.projected_cost;
+  const isEOL = s.lifePctUsed >= 1;
+  // EOL vehicles have yearsLeft=0, so projected_cost=0 — that makes repair always look cheap.
+  // Instead use a 5-year look-ahead: the vehicle will keep accumulating costs even past its threshold.
+  const lookAheadYears = isEOL ? 5 : s.yearsLeft;
+  const projMaint = Math.round(s.avg_annual * lookAheadYears);
+  const totalIfRepair = repair + projMaint;
   const el = document.getElementById(`repairResult_${id}`);
+
+  // Tighter thresholds for EOL vehicles — replacement should be favored more strongly
+  const goThresh     = isEOL ? 0.35 : 0.5;
+  const cautionThresh = isEOL ? 0.6  : 0.8;
+
+  const eolBanner = isEOL
+    ? `<div style="background:rgba(239,68,68,0.1);border:1px solid var(--red);border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.65rem;font-size:0.82rem;">
+        <strong style="color:var(--red);">Vehicle is at or past its lifecycle threshold.</strong>
+        Maintenance is projected over a 5-year window since remaining life is 0. Replacement should be weighted heavily.
+       </div>` : '';
+
+  const maintLabel = isEOL
+    ? `5-yr look-ahead (at/past lifecycle)`
+    : `projected remaining life`;
 
   let cls, verdict, detail;
   if (replace > 0) {
     const savings = replace - totalIfRepair;
-    if (totalIfRepair < replace * 0.5) {
-      cls = 'go'; verdict = '✅ DO THE REPAIR';
-    } else if (totalIfRepair < replace * 0.8) {
+    if (totalIfRepair < replace * goThresh) {
+      cls = 'go';
+      verdict = isEOL ? '⚠️ REPAIR MAY BE JUSTIFIED — MONITOR CLOSELY' : '✅ DO THE REPAIR';
+    } else if (totalIfRepair < replace * cautionThresh) {
       cls = 'caution'; verdict = '⚠️ MARGINAL — CONSIDER CAREFULLY';
     } else {
       cls = 'no-go'; verdict = '🚫 REPLACE THE VEHICLE';
     }
     detail = `
+      ${eolBanner}
       <div><strong>Repair cost:</strong> $${repair.toLocaleString()}</div>
-      <div><strong>+ Projected remaining maintenance:</strong> $${s.projected_cost.toLocaleString()} (${s.avg_annual.toLocaleString()}/yr × ${s.yearsLeft} yrs)</div>
+      <div><strong>+ Projected maintenance:</strong> $${projMaint.toLocaleString()} ($${s.avg_annual.toLocaleString()}/yr × ${lookAheadYears} yrs — ${maintLabel})</div>
       <div><strong>= Total cost to keep:</strong> $${totalIfRepair.toLocaleString()}</div>
       <div style="margin-top:0.5rem;"><strong>vs. Replacement cost:</strong> $${replace.toLocaleString()}</div>
       <div style="margin-top:0.25rem;font-weight:600;color:${savings > 0 ? 'var(--green)' : 'var(--red)'}">
@@ -1031,14 +1072,47 @@ function calcRepair(id) {
   } else {
     cls = 'caution'; verdict = '⚠️ ENTER REPLACEMENT COST FOR FULL ANALYSIS';
     detail = `
+      ${eolBanner}
       <div><strong>Repair cost:</strong> $${repair.toLocaleString()}</div>
-      <div><strong>+ Projected remaining maintenance:</strong> $${s.projected_cost.toLocaleString()}</div>
+      <div><strong>+ Projected maintenance:</strong> $${projMaint.toLocaleString()} ($${s.avg_annual.toLocaleString()}/yr × ${lookAheadYears} yrs — ${maintLabel})</div>
       <div><strong>= Total cost to keep vehicle:</strong> $${totalIfRepair.toLocaleString()}</div>
       <div style="margin-top:0.4rem;color:var(--muted);">Enter an estimated replacement cost above to get a full recommendation.</div>`;
   }
 
   el.className = `repair-result show ${cls}`;
   el.innerHTML = `<div class="repair-verdict">${verdict}</div><div class="repair-breakdown">${detail}</div>`;
+}
+
+let editingRecord = { vehicleId: null, idx: null };
+
+function editRecord(vehicleId, idx) {
+  editingRecord = { vehicleId, idx };
+  openDetail(vehicleId);
+}
+
+function cancelRecordEdit() {
+  const vid = editingRecord.vehicleId;
+  editingRecord = { vehicleId: null, idx: null };
+  openDetail(vid);
+}
+
+function saveRecordEdit(vehicleId, idx) {
+  const v = vehicles.find(x => x.id === vehicleId);
+  if (!v || !v.records[idx]) return;
+  const r = v.records[idx];
+  r.date = document.getElementById('er_date').value;
+  r.mileage = parseFloat(document.getElementById('er_miles').value) || null;
+  const cost = parseFloat(document.getElementById('er_cost').value);
+  if (!isNaN(cost) && cost > 0) r.price = cost;
+  r.service = document.getElementById('er_svc').value.trim();
+  r.invoice = document.getElementById('er_inv').value.trim();
+  const em = getEffectiveMileage(v);
+  if (em) v.current_mileage = em;
+  editingRecord = { vehicleId: null, idx: null };
+  openDetail(vehicleId);
+  renderDashboard();
+  renderTable();
+  renderAlerts();
 }
 
 function addServiceRecord(id) {
