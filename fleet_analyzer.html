@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fleet Analyzer — CMR</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #181c27;
+    --card: #1e2336;
+    --border: #2a3050;
+    --accent: #f59e0b;
+    --accent2: #3b82f6;
+    --green: #22c55e;
+    --red: #ef4444;
+    --yellow: #eab308;
+    --text: #e8ecf4;
+    --muted: #7a8aaa;
+    --condensed: 'Barlow Condensed', sans-serif;
+    --body: 'Barlow', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--body); min-height: 100vh; }
+
+  /* HEADER */
+  header {
+    background: var(--surface);
+    border-bottom: 2px solid var(--accent);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 60px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-family: var(--condensed); font-weight: 900; font-size: 1.5rem; letter-spacing: 0.05em; }
+  .logo span { color: var(--accent); }
+  .header-meta { font-size: 0.75rem; color: var(--muted); text-align: right; line-height: 1.4; }
+
+  /* TABS */
+  .tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 2rem; gap: 0; }
+  .tab-btn {
+    background: none; border: none; color: var(--muted); font-family: var(--condensed);
+    font-size: 0.95rem; font-weight: 600; letter-spacing: 0.05em; padding: 0.75rem 1.5rem;
+    cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.15s;
+    text-transform: uppercase;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* LAYOUT */
+  .main { padding: 1.5rem 2rem; max-width: 1600px; margin: 0 auto; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* FLEET SUMMARY CARDS */
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.2rem;
+  }
+  .stat-card .label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.3rem; }
+  .stat-card .value { font-family: var(--condensed); font-size: 2rem; font-weight: 700; line-height: 1; }
+  .stat-card .sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; }
+  .val-green { color: var(--green); }
+  .val-yellow { color: var(--yellow); }
+  .val-red { color: var(--red); }
+  .val-accent { color: var(--accent); }
+
+  /* FILTERS */
+  .filters { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; align-items: center; }
+  .filter-input, .filter-select {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 0.5rem 0.75rem; border-radius: 6px; font-family: var(--body); font-size: 0.85rem;
+    outline: none; transition: border-color 0.15s;
+  }
+  .filter-input:focus, .filter-select:focus { border-color: var(--accent); }
+  .filter-input { min-width: 220px; }
+  .filter-select { min-width: 140px; cursor: pointer; }
+  .filter-label { font-size: 0.8rem; color: var(--muted); }
+
+  /* VEHICLE TABLE */
+  .vehicle-table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  thead { background: var(--surface); }
+  th {
+    padding: 0.65rem 0.9rem; text-align: left; font-family: var(--condensed);
+    font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted); white-space: nowrap;
+    border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;
+  }
+  th:hover { color: var(--text); }
+  th.sort-asc::after { content: ' ↑'; color: var(--accent); }
+  th.sort-desc::after { content: ' ↓'; color: var(--accent); }
+  td { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background 0.1s; cursor: pointer; }
+  tbody tr:hover { background: rgba(245,158,11,0.05); }
+
+  .badge {
+    display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+  .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge-blue { background: rgba(59,130,246,0.15); color: var(--accent2); }
+
+  /* HEALTH BAR */
+  .health-bar-wrap { display: flex; align-items: center; gap: 0.5rem; }
+  .health-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; min-width: 60px; }
+  .health-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+  .health-pct { font-size: 0.75rem; color: var(--muted); min-width: 28px; text-align: right; }
+
+  /* VEHICLE DETAIL MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    z-index: 200; align-items: flex-start; justify-content: center; padding: 2rem 1rem;
+    overflow-y: auto;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    width: 100%; max-width: 900px; position: relative; animation: slideIn 0.2s ease;
+  }
+  @keyframes slideIn { from { transform: translateY(-20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-header {
+    padding: 1.5rem 2rem 1rem; border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: flex-start;
+  }
+  .modal-title { font-family: var(--condensed); font-size: 1.6rem; font-weight: 700; }
+  .modal-sub { color: var(--muted); font-size: 0.85rem; margin-top: 0.2rem; }
+  .modal-close {
+    background: none; border: none; color: var(--muted); font-size: 1.5rem;
+    cursor: pointer; padding: 0.25rem; line-height: 1; transition: color 0.15s;
+  }
+  .modal-close:hover { color: var(--text); }
+  .modal-body { padding: 1.5rem 2rem; }
+
+  /* DETAIL GRID */
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+  .detail-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+  }
+  .detail-card .dc-label { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.25rem; }
+  .detail-card .dc-value { font-family: var(--condensed); font-size: 1.4rem; font-weight: 700; }
+  .detail-card .dc-sub { font-size: 0.75rem; color: var(--muted); margin-top: 0.1rem; }
+
+  /* REPAIR DECISION TOOL */
+  .repair-tool {
+    background: var(--card); border: 1px solid var(--accent); border-radius: 8px;
+    padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
+  }
+  .repair-tool-title { font-family: var(--condensed); font-size: 1rem; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; margin-bottom: 1rem; text-transform: uppercase; }
+  .repair-inputs { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
+  .repair-field { display: flex; flex-direction: column; gap: 0.3rem; }
+  .repair-field label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .repair-field input {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; width: 160px; outline: none;
+  }
+  .repair-field input:focus { border-color: var(--accent); }
+  .repair-calc-btn {
+    background: var(--accent); color: #000; border: none; padding: 0.5rem 1.25rem;
+    border-radius: 6px; font-family: var(--condensed); font-size: 1rem; font-weight: 700;
+    cursor: pointer; letter-spacing: 0.05em; transition: opacity 0.15s;
+  }
+  .repair-calc-btn:hover { opacity: 0.85; }
+  .repair-result { margin-top: 1.1rem; padding: 1rem 1.2rem; border-radius: 8px; display: none; }
+  .repair-result.show { display: block; }
+  .repair-result.go { background: rgba(34,197,94,0.1); border: 1px solid var(--green); }
+  .repair-result.caution { background: rgba(234,179,8,0.1); border: 1px solid var(--yellow); }
+  .repair-result.no-go { background: rgba(239,68,68,0.1); border: 1px solid var(--red); }
+  .repair-verdict { font-family: var(--condensed); font-size: 1.4rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .repair-breakdown { font-size: 0.85rem; color: var(--muted); line-height: 1.8; }
+  .repair-breakdown strong { color: var(--text); }
+
+  /* SECTION HEADERS */
+  .section-header { font-family: var(--condensed); font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.75rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); }
+
+  /* MAINTENANCE HISTORY */
+  .maint-table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+  .maint-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .maint-table th { padding: 0.5rem 0.8rem; font-family: var(--condensed); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); background: var(--card); border-bottom: 1px solid var(--border); }
+  .maint-table td { padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); }
+  .maint-table tr:last-child td { border-bottom: none; }
+  .maint-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* YEARLY CHART */
+  .yearly-bars { display: flex; align-items: flex-end; gap: 6px; height: 80px; margin-bottom: 0.25rem; }
+  .year-bar-group { display: flex; flex-direction: column; align-items: center; flex: 1; height: 100%; justify-content: flex-end; }
+  .year-bar { width: 100%; background: var(--accent2); border-radius: 3px 3px 0 0; min-height: 2px; transition: height 0.3s; position: relative; }
+  .year-bar:hover .bar-tooltip { display: block; }
+  .bar-tooltip {
+    display: none; position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.3rem 0.5rem; font-size: 0.72rem; white-space: nowrap; z-index: 10; margin-bottom: 4px;
+  }
+  .year-label { font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
+
+  /* EDIT MODAL */
+  .edit-form { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .form-field { display: flex; flex-direction: column; gap: 0.3rem; }
+  .form-field.full { grid-column: 1/-1; }
+  .form-field label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .form-field input, .form-field select {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.9rem; outline: none;
+    font-family: var(--body);
+  }
+  .form-field input:focus, .form-field select:focus { border-color: var(--accent); }
+  .form-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .btn-primary {
+    background: var(--accent); color: #000; border: none; padding: 0.5rem 1.5rem;
+    border-radius: 6px; font-family: var(--condensed); font-size: 1rem; font-weight: 700;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .btn-primary:hover { opacity: 0.85; }
+  .btn-secondary {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    padding: 0.5rem 1.25rem; border-radius: 6px; font-family: var(--condensed);
+    font-size: 1rem; font-weight: 600; cursor: pointer;
+  }
+
+  /* ADD SERVICE */
+  .add-service-form { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 0.75rem; align-items: end; margin-top: 1rem; }
+  .add-service-form .form-field input { width: 100%; }
+
+  /* PRINT */
+  @media print {
+    header, .tabs, .filters, .repair-tool { display: none !important; }
+    .modal-overlay { position: relative; display: block !important; padding: 0; }
+    .modal { box-shadow: none; border: none; max-width: 100%; }
+  }
+
+  /* NO RECORDS */
+  .no-records { text-align: center; padding: 3rem; color: var(--muted); font-size: 0.9rem; }
+
+  /* RISK ALERTS */
+  .risk-panel { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin-bottom: 1.5rem; }
+  .risk-item {
+    display: flex; align-items: center; gap: 1rem; padding: 0.6rem 0.8rem;
+    border-radius: 6px; margin-bottom: 0.5rem; cursor: pointer; transition: background 0.1s;
+  }
+  .risk-item:hover { background: rgba(255,255,255,0.03); }
+  .risk-item:last-child { margin-bottom: 0; }
+  .risk-icon { font-size: 1.1rem; width: 24px; text-align: center; }
+  .risk-text { flex: 1; font-size: 0.85rem; }
+  .risk-text strong { display: block; }
+  .risk-text span { color: var(--muted); font-size: 0.8rem; }
+  .risk-cost { font-family: var(--condensed); font-size: 1rem; font-weight: 700; white-space: nowrap; }
+
+  .scroll-top { font-size: 0.75rem; color: var(--muted); cursor: pointer; }
+  .scroll-top:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CMR <span>FLEET</span> ANALYZER</div>
+  <div class="header-meta">
+    <div id="fleetCount">Loading...</div>
+    <div>Last updated: <span id="lastUpdated"></span></div>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
+  <button class="tab-btn" onclick="switchTab('fleet')">Fleet</button>
+  <button class="tab-btn" onclick="switchTab('alerts')">⚠ Alerts</button>
+</div>
+
+<div class="main">
+
+  <!-- DASHBOARD TAB -->
+  <div id="tab-dashboard" class="tab-content active">
+    <div class="summary-grid" id="summaryGrid"></div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; flex-wrap:wrap;">
+      <div>
+        <div class="section-header">Fleet Health by Vehicle</div>
+        <div id="dashHealthList"></div>
+      </div>
+      <div>
+        <div class="section-header">Highest Annual Maintenance Cost</div>
+        <div id="dashCostList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLEET TAB -->
+  <div id="tab-fleet" class="tab-content">
+    <div class="filters">
+      <input class="filter-input" id="searchInput" placeholder="Search driver, plate, make, model…" oninput="renderTable()">
+      <select class="filter-select" id="makeFilter" onchange="renderTable()">
+        <option value="">All Makes</option>
+      </select>
+      <select class="filter-select" id="statusFilter" onchange="renderTable()">
+        <option value="">All Status</option>
+        <option value="green">Good</option>
+        <option value="yellow">Aging</option>
+        <option value="red">At/Over Limit</option>
+      </select>
+      <button class="btn-primary" onclick="openAddVehicle()" style="margin-left:auto;">+ Add Vehicle</button>
+    </div>
+    <div class="vehicle-table-wrap">
+      <table id="vehicleTable">
+        <thead>
+          <tr>
+            <th onclick="sortTable('vehicle_num')">#</th>
+            <th onclick="sortTable('assigned_to')">Driver / Assigned</th>
+            <th onclick="sortTable('year')">Year</th>
+            <th onclick="sortTable('make')">Make / Model</th>
+            <th>Plate</th>
+            <th onclick="sortTable('current_mileage')">Mileage</th>
+            <th onclick="sortTable('life_pct')">Life Remaining</th>
+            <th onclick="sortTable('years_remaining')">Est. Yrs Left</th>
+            <th onclick="sortTable('avg_annual')">Avg $/Yr</th>
+            <th onclick="sortTable('projected_cost')">Proj. Remaining Cost</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="vehicleTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ALERTS TAB -->
+  <div id="tab-alerts" class="tab-content">
+    <div class="section-header">Vehicles Requiring Attention</div>
+    <div id="alertsPanel"></div>
+  </div>
+
+</div>
+
+<!-- VEHICLE DETAIL MODAL -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalTitle">Vehicle Details</div>
+        <div class="modal-sub" id="modalSub"></div>
+      </div>
+      <div style="display:flex;gap:0.5rem;align-items:flex-start;">
+        <button class="btn-secondary" onclick="openEditVehicle(currentVehicleId)" style="font-size:0.8rem;padding:0.3rem 0.75rem;">Edit</button>
+        <button class="modal-close" onclick="closeModal('detailModal')">×</button>
+      </div>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ADD/EDIT VEHICLE MODAL -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <div class="modal-title" id="editModalTitle">Edit Vehicle</div>
+      <button class="modal-close" onclick="closeModal('editModal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="edit-form" id="editForm"></div>
+      <div class="form-actions">
+        <button class="btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+        <button class="btn-primary" onclick="saveVehicle()">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+const TODAY = new Date();
+const CURRENT_YEAR = TODAY.getFullYear();
+
+const LIFE_DEFAULTS = {
+  truck:  { years: 15, miles: 250000 },
+  suv:    { years: 12, miles: 200000 },
+  van:    { years: 12, miles: 200000 },
+  car:    { years: 10, miles: 150000 },
+};
+
+function getVehicleType(v) {
+  const m = (v.model || '').toLowerCase();
+  const mk = (v.make || '').toLowerCase();
+  if (m.includes('transit') || m.includes('van')) return 'van';
+  if (m.includes('f-150') || m.includes('f-250') || m.includes('f-450') || m.includes('silverado') || m.includes('colorado') || m.includes('canyon') || m.includes('sierra') || m.includes('f150') || m.includes('f250') || m.includes('f450')) return 'truck';
+  if (m.includes('escape') || m.includes('equinox') || m.includes('acadia') || m.includes('wrangler') || m.includes('cherokee') || m.includes('explorer') || m.includes('edge') || m.includes('explorer')) return 'suv';
+  return 'truck';
+}
+
+const RAW_VEHICLES = [{"id":"PIX1268","plate":"PIX1268","vin":"1FTBF2B66FEA31978","year":2015,"make":"Ford","model":"F-250 Super Duty XLT","assigned_to":"Hammond Shop","vehicle_num":"2","cost_new":37565.0,"current_mileage":198740,"records":[{"date":"2025-02-12","mileage":198740,"service":"scan computer, circuit check","price":345.87,"invoice":"10727"},{"date":"2024-10-25","mileage":196854,"service":"oil, filter, air filter, new right front wheel bearing, front disc brake, replace hood latch","price":1808.45,"invoice":"10421"},{"date":"2023-11-17","mileage":195000,"service":"oil, filter","price":75.39,"invoice":"850010"},{"date":"2023-05-18","mileage":180065,"service":"oil, windshield wipers","price":103.24,"invoice":"838179"},{"date":"2023-02-07","mileage":174941,"service":"oil","price":71.29,"invoice":"Liberty Ford"},{"date":"2022-07-28","mileage":166300,"service":"oil change, tune up, brakes and shocks","price":5227.74,"invoice":"128633"},{"date":"2022-01-19","mileage":156133,"service":"oil filter, air filter, balance, R&R bulb, brake shoes,caliper, brake flush, axle track bar, tie rod, alignment, drive line, right side lock out","price":3668.22,"invoice":"125908"}]},{"id":"PDT1457","plate":"PDT1457","vin":"1FTNR2CG6FKB21600","year":2015,"make":"Ford","model":"Transit-250","assigned_to":"Hammond Shop van","vehicle_num":"5","cost_new":33110.0,"current_mileage":74553,"records":[{"date":"2025-12-12","mileage":74553,"service":"diagnose check engine light","price":144.11,"invoice":"11516"},{"date":"2025-02-11","mileage":64844,"service":"check engine light, air filter, spark plugs, turbo boost control","price":667.2,"invoice":"10721"},{"date":"2024-03-19","mileage":59494,"service":"oil, filter, air filter, rotate tires","price":172.59,"invoice":"9826"},{"date":"2021-09-24","mileage":25848,"service":"oil, oil filter, mount & balance, disc rotor,lubrication & inspection","price":1782.39,"invoice":"124408"}]},{"id":"PIX1267","plate":"PIX1267","vin":"1FTBF2B61FEA21116","year":2015,"make":"Ford","model":"F-250 Super Duty XLT","assigned_to":"Hammond Shop/Plow Truck","vehicle_num":"1","cost_new":37565.0,"current_mileage":116238,"records":[{"date":"2025-02-13","mileage":116238,"service":"check engine light","price":72.59,"invoice":"10731"},{"date":"2024-12-13","mileage":115987,"service":"oil, fluids","price":80.11,"invoice":"10551"},{"date":"2023-11-03","mileage":113277,"service":"oil, filter, fluids","price":49.55,"invoice":"134348"},{"date":"2023-11-02","mileage":113277,"service":"oil, oil filter","price":55.41,"invoice":"134777"},{"date":"2022-10-04","mileage":107682,"service":"oil, tire rotation, windshield","price":332.57,"invoice":"129604"},{"date":"2021-11-01","mileage":101040,"service":"shock absorbers, steering damper, mount & balance, front brakes","price":2872.61,"invoice":"9284"}]},{"id":"PIZ7129","plate":"PIZ7129","vin":"1FDUF4GT3GEA10618","year":2016,"make":"Ford","model":"F-450","assigned_to":"Hammond Stake Body","vehicle_num":"4","cost_new":40000.0,"current_mileage":154922,"records":[{"date":"2025-08-15","mileage":154922,"service":"oil, filter, air fliter,diesel exhaust fluid","price":359.65,"invoice":"11218"},{"date":"2025-04-02","mileage":139521,"service":"repair oil leaks, other repairs","price":5147.9,"invoice":"453116"},{"date":"2024-08-21","mileage":132668,"service":"sensor x5, filter,gasket, drive shaft","price":9243.91,"invoice":"444150"},{"date":"2024-03-18","mileage":126505,"service":"oil,filter, exhaust fluid, track ball joint- upper, lower, steering damper asby,drag link rod, steering center link,steering tie rod, outer tie rod, connecting sleeves, front end alignment","price":3830.3,"invoice":"9822"},{"date":"2023-11-10","mileage":120596,"service":"intake manifold, turbocharger, lub and inspection, diesel manual regen","price":5276.35,"invoice":"134753"},{"date":"2023-11-10","mileage":120596,"service":"gasket kit, intake gasket, exhaust gasket, oil","price":5276.35,"invoice":"134753"},{"date":"2023-10-04","mileage":118188,"service":"oil,filter,DEF fluid","price":139.95,"invoice":"134348"},{"date":"2023-06-08","mileage":109103,"service":"oil,filter","price":252.37,"invoice":"132639"},{"date":"2023-04-20","mileage":107490,"service":"front widshield replacement","price":351.22,"invoice":"131970"},{"date":"2022-10-05","mileage":100751,"service":"oil, oil filter","price":231.68,"invoice":"129603"},{"date":"2022-09-09","mileage":99594,"service":"tailgate switch, back up alarm","price":864.01,"invoice":"129237"},{"date":"2022-04-11","mileage":92124,"service":"Air Filter, Rotella, Oil Filter","price":237.75,"invoice":"127089"},{"date":"2021-09-10","mileage":83177,"service":"lubrication & inspection, brake light","price":259.81,"invoice":"124023"}]},{"id":"PJU4916","plate":"PJU4916","vin":"1FTEX1E86HFA23037","year":2017,"make":"Ford","model":"F-150","assigned_to":"SP Truck","vehicle_num":"6","cost_new":34025.0,"current_mileage":311357,"records":[{"date":"2026-01-15","mileage":311357,"service":"oil, fluids","price":75.73,"invoice":"11599"},{"date":"2025-05-20","mileage":300551,"service":"oil, filter, rotate tires","price":874.45,"invoice":"11004"},{"date":"2025-03-04","mileage":293820,"service":"oil, wheel bearings","price":616.35,"invoice":"10783"},{"date":"2024-12-19","mileage":287980,"service":"front disc brake, pin kit and boot, front right wheel bearing, tires mounted, left front wheel nuts, front end alignment","price":2213.67,"invoice":"10568"},{"date":"2024-12-11","mileage":287246,"service":"oil, fluids","price":149.33,"invoice":"10546"},{"date":"2024-12-02","mileage":138193,"service":"oil, filter, tires, alignment","price":1421.23,"invoice":"448682"},{"date":"2024-05-20","mileage":267943,"service":"oil, filter, fluids, diagnose check engine","price":412.55,"invoice":"9991"},{"date":"2023-10-24","mileage":246152,"service":"spark plugs, pressure test, radiator, coolant recovery tank, radiator hose, vacuum fill, coolant, air conditioning service, performance test,shock & strut assembly","price":3951.41,"invoice":"134600"},{"date":"2023-09-23","mileage":242062,"service":"oil, coolant exchange","price":215.76,"invoice":"Take5- 0739"},{"date":"2023-08-04","mileage":235748,"service":"brakes,tire rotation","price":524.74,"invoice":"10478"},{"date":"2023-07-02","mileage":231488,"service":"oil","price":109.62,"invoice":"not H&D"},{"date":"2023-04-06","mileage":220965,"service":"tires- mount and balance","price":1143.45,"invoice":"131663"},{"date":"2023-01-22","mileage":211176,"service":"oil","price":44.33,"invoice":"204596"},{"date":"2022-11-17","mileage":204419,"service":"oil","price":52.66,"invoice":"9975"},{"date":"2022-09-23","mileage":198259,"service":"tire rotation, transmission assembly, battery, windshield","price":7403.45,"invoice":"129118"},{"date":"2022-01-06","mileage":168343,"service":"oil, oil filter","price":38.69,"invoice":"9368"},{"date":"2021-09-21","mileage":156041,"service":"oil, oil filter","price":38.68,"invoice":"9204"},{"date":"2021-07-13","mileage":149126,"service":"brakes, mount & balance, alignment, oil, oil filter","price":1676.27,"invoice":"9052"}]},{"id":"PKH7143","plate":"PKH7143","vin":"1FTEW1EP9JFE02727","year":2018,"make":"Ford","model":"F-150","assigned_to":"Adams","vehicle_num":"9","cost_new":37430.0,"current_mileage":138002,"records":[{"date":"2025-08-22","mileage":137353,"service":"oil, filter","price":69.22,"invoice":"11245"},{"date":"2024-05-29","mileage":138002,"service":"oil, filter, fluids","price":80.29,"invoice":"10016"},{"date":"2023-10-27","mileage":125341,"service":"oil, filter, tire rotation","price":111.72,"invoice":"10647"},{"date":"2023-06-30","mileage":null,"service":"driver side bumper cover","price":93.74,"invoice":"10377"},{"date":"2023-06-16","mileage":110140,"service":"oil, filter, spark plugs, catalytic converter, coolant system, transmission oil","price":5195.58,"invoice":"10126"},{"date":"2022-10-28","mileage":129913,"service":"exhaust backpressure sensor, front drivers door glass","price":487.69,"invoice":"129913"},{"date":"2022-10-25","mileage":104070,"service":"oil, front brakes, balance, alignment, differential pinion seal","price":2312.48,"invoice":"129784"},{"date":"2022-06-28","mileage":96236,"service":"oil, filter, tire check","price":53.79,"invoice":"Liberty Ford"},{"date":"2022-01-19","mileage":85247,"service":"inspection, oil/filter, rotation","price":121.95,"invoice":"126036"}]},{"id":"GWY9413","plate":"GWY9413","vin":"1FMCU9J93JUD16632","year":2018,"make":"Ford","model":"Escape","assigned_to":"Tuckerman","vehicle_num":"8","cost_new":33490.0,"current_mileage":147904,"records":[{"date":"2026-04-08","mileage":147904,"service":"oil, filter, scan computer","price":630.84,"invoice":"11809"},{"date":"2026-01-22","mileage":144752,"service":"oil, filter","price":70.32,"invoice":"11616"},{"date":"2025-11-07","mileage":141022,"service":"oil, fluids","price":69.22,"invoice":"11430"},{"date":"2025-10-03","mileage":139320,"service":"battery, towing","price":601.16,"invoice":"11344"},{"date":"","mileage":134074,"service":"oil, filter, rotate tires","price":85.71,"invoice":"11053"},{"date":"2025-02-17","mileage":128296,"service":"replaced both front cv axles and side carrier bearing retainer","price":1113.11,"invoice":"10740"},{"date":"2025-01-21","mileage":127173,"service":"oil, fluids","price":69.22,"invoice":"10647"},{"date":"2024-10-25","mileage":123372,"service":"tires- mount and balance","price":1347.19,"invoice":"10419"},{"date":"2024-03-12","mileage":112182,"service":"oil, filter, misc fluids","price":69.22,"invoice":"9799"},{"date":"2023-09-29","mileage":105114,"service":"oil,filter","price":76.14,"invoice":"134257"},{"date":"2023-06-21","mileage":101134,"service":"oil, filter, rear and front brake service, brake system fluid flush","price":764.54,"invoice":"10371"},{"date":"2023-03-14","mileage":96034,"service":"oil, rotation","price":100.91,"invoice":"131518"},{"date":"2022-08-26","mileage":88497,"service":"oil, filter, tire rotation","price":153.27,"invoice":"129080"},{"date":"2022-04-26","mileage":83672,"service":"oil, filter,lube","price":67.1,"invoice":"127325"},{"date":"2021-12-14","mileage":78686,"service":"oil, oil filter,brake shoes","price":451.62,"invoice":"9337"},{"date":"2021-09-03","mileage":74556,"service":"oil, oil filter,lubrication & inspection","price":67.1,"invoice":"124120"}]},{"id":"HNC6163","plate":"HNC6163","vin":"1C4HJXFG2JW254451","year":2018,"make":"Jeep","model":"Wrangler","assigned_to":"Schurman","vehicle_num":"7","cost_new":40495.0,"current_mileage":136761,"records":[{"date":"2023-11-30","mileage":136761,"service":"oil, oil filter","price":80.29,"invoice":"10688"},{"date":"2023-08-22","mileage":130037,"service":"oil, filter","price":79.17,"invoice":"10512"},{"date":"2023-06-09","mileage":123298,"service":"oil, filter, mount and balance 4 tires","price":1535.38,"invoice":"10341"},{"date":"2023-03-03","mileage":117059,"service":"oil, filter","price":91.3,"invoice":"10143"},{"date":"2022-11-03","mileage":108091,"service":"oil, filter, battery","price":408.89,"invoice":"9951"},{"date":"2021-11-01","mileage":85678,"service":"lubrication & inspection, rotation, alignment","price":194.89,"invoice":"124870"},{"date":"2021-08-06","mileage":80070,"service":"rotation, oil, oil filter, cabin air filter, brake flush","price":294.03,"invoice":"9101"}]},{"id":"PMN6226","plate":"PMN6226","vin":"1GCGTBEN1M1227879","year":2021,"make":"Chevy","model":"Colorado","assigned_to":"Snyder","vehicle_num":"11","cost_new":36620.0,"current_mileage":171365,"records":[{"date":"2026-02-20","mileage":171365,"service":"thermostat, serpentine belt, two front TPMS sensors","price":912.02,"invoice":"11705"},{"date":"2025-04-22","mileage":137681,"service":"oil, filter","price":113.14,"invoice":"10921"},{"date":"2025-02-10","mileage":130970,"service":"oil, fluids","price":106.54,"invoice":"10716"},{"date":"2024-09-23","mileage":116536,"service":"oil, oil fliter, air filter, tire rotation, front brakes","price":727.87,"invoice":"10321"},{"date":"2024-05-17","mileage":102239,"service":"oil, filter, fluids","price":108.75,"invoice":"9984"},{"date":"2024-03-08","mileage":92926,"service":"oil, filter, rotation","price":128.54,"invoice":"9791"},{"date":"2024-01-18","mileage":null,"service":"windshield","price":401.45,"invoice":"10756"},{"date":"2024-01-04","mileage":84821,"service":"oil, filter","price":86.98,"invoice":"10735"},{"date":"2023-10-27","mileage":77125,"service":"oil, filter","price":78.05,"invoice":"10648"},{"date":"2023-05-08","mileage":59050,"service":"oil, filter","price":100.2,"invoice":"10263"},{"date":"2023-05-01","mileage":58407,"service":"tire repair","price":1193.49,"invoice":"132115"},{"date":"2023-04-28","mileage":null,"service":"tire repair, mount, balance, alignment","price":1193.49,"invoice":"132115"},{"date":"2023-02-21","mileage":51726,"service":"oil, tire rotation, tire repair","price":199.46,"invoice":"131274"},{"date":"2022-11-23","mileage":44862,"service":"oil, oil filter, windshield replaced, tire rotation","price":420.37,"invoice":"130144"},{"date":"2022-09-13","mileage":38814,"service":"oil, oil filter","price":86.12,"invoice":"129246"},{"date":"2022-06-24","mileage":null,"service":"oil, filter, tire rotation","price":106.2,"invoice":"128246"},{"date":"2022-04-14","mileage":29503,"service":"oil, castrol edge","price":88.98,"invoice":"127162"},{"date":"2022-01-13","mileage":13680,"service":"lubrication & inspection, rotation","price":101.24,"invoice":"125991"},{"date":"2021-10-14","mileage":5859,"service":"lubrication & inspection","price":93.23,"invoice":"124590"}]},{"id":"PMN6225","plate":"PMN6225","vin":"1GCGTBEN0M1263529","year":2021,"make":"Chevy","model":"Colorado","assigned_to":"Stefanick","vehicle_num":"10","cost_new":36620.0,"current_mileage":155969,"records":[{"date":"2026-02-18","mileage":155969,"service":"oil, filter","price":112.07,"invoice":"11696"},{"date":"2026-01-07","mileage":150835,"service":"oil, cabin air filter, engine air filter, fog light","price":886.65,"invoice":"11568"},{"date":"2025-10-23","mileage":143562,"service":"oil","price":110.96,"invoice":"11393"},{"date":"2025-08-22","mileage":136911,"service":"oil, filter","price":109.86,"invoice":"11244"},{"date":"2025-05-08","mileage":129594,"service":"oil, filter","price":109.86,"invoice":"10968"},{"date":"2025-03-05","mileage":121890,"service":"scan computer, system check","price":764.46,"invoice":"10790"},{"date":"2025-02-20","mileage":121878,"service":"oil, wipers, brakes, tires","price":2579.23,"invoice":"10753"},{"date":"2024-05-23","mileage":null,"service":"hood repair","price":1737.65,"invoice":"33663"},{"date":"2023-07-27","mileage":null,"service":"oil,filter","price":89.07,"invoice":"10448"},{"date":"2023-06-23","mileage":66399,"service":"oil,filter","price":100.2,"invoice":"10389"},{"date":"2023-03-30","mileage":59462,"service":"oil,filter","price":100.2,"invoice":"10189"},{"date":"2023-01-17","mileage":52257,"service":"oil, filter","price":100.2,"invoice":"10078"},{"date":"2022-08-22","mileage":36931,"service":"oil, oil fliter","price":112.72,"invoice":"129050"},{"date":"2021-12-03","mileage":12345,"service":"oil, oil filter, rotation","price":96.62,"invoice":"9321"}]},{"id":"JDB9150","plate":"JDB9150","vin":"1C4RjKDG1M8190633","year":2021,"make":"Jeep","model":"Cherokee","assigned_to":"Davis","vehicle_num":"12","cost_new":55000.0,"current_mileage":65576,"records":[{"date":"2025-12-22","mileage":65576,"service":"oil, filter, tire rotation","price":129.64,"invoice":"11544"},{"date":"2023-09-08","mileage":28561,"service":"oil, oil filter","price":80.93,"invoice":"198710"},{"date":"2023-02-10","mileage":18803,"service":"oil, filter","price":102.43,"invoice":"10111"}]},{"id":"PLR6169","plate":"PLR6169","vin":"1GCRDAEK2NZ589535","year":2022,"make":"Chevy","model":"Silverado","assigned_to":"Bihlman","vehicle_num":"16","cost_new":44181.0,"current_mileage":56948,"records":[{"date":"2025-11-12","mileage":56948,"service":"oil, rotation","price":136.23,"invoice":"11445"},{"date":"2025-07-30","mileage":50262,"service":"oil, filter, air filter, rear brakes, tires, alignment","price":2018.32,"invoice":"11178"},{"date":"2025-05-05","mileage":45667,"service":"check engine, U codes and P codes","price":525.0,"invoice":"44577"},{"date":"2025-02-28","mileage":42722,"service":"oil, filter","price":113.14,"invoice":"10774"},{"date":"2024-08-30","mileage":35591,"service":"oil, filter, air filter, fluids","price":175.14,"invoice":"10254"},{"date":"2023-06-02","mileage":14170,"service":"oil, filter","price":100.2,"invoice":"10332"},{"date":"2023-02-03","mileage":null,"service":"oil,filter","price":101.31,"invoice":"10102"}]},{"id":"GTM4635","plate":"GTM4635","vin":"3GNAXSEVXNS239031","year":2022,"make":"Chevy","model":"Equinox","assigned_to":"H1_Pool Car","vehicle_num":"18","cost_new":31473.0,"current_mileage":31121,"records":[{"date":"2025-10-16","mileage":31121,"service":"oil, fluids, tire rotation","price":125.29,"invoice":"11368"},{"date":"2025-07-09","mileage":25009,"service":"oil, filter, rotate tires","price":125.23,"invoice":"11111"},{"date":"2024-11-14","mileage":17963,"service":"oil, fluids, tire rotation","price":194.56,"invoice":"10472"},{"date":"2024-05-30","mileage":11273,"service":"oil, filter, fluids","price":110.08,"invoice":"10020"},{"date":"2023-12-06","mileage":4997,"service":"oil, filter","price":77.49,"invoice":"10698"}]},{"id":"PLD2823","plate":"PLD2823","vin":"3GCPYBEKXNG111574","year":2022,"make":"Chevy","model":"Silverado","assigned_to":"Radalia","vehicle_num":"13","cost_new":44000.0,"current_mileage":128590,"records":[{"date":"2026-02-05","mileage":128590,"service":"oil, filter","price":113.14,"invoice":"11663"},{"date":"2025-11-20","mileage":122560,"service":"oil, air filter, rotation","price":208.37,"invoice":"11463"},{"date":"2025-09-18","mileage":116349,"service":"oil, fliter","price":103.93,"invoice":"11314"},{"date":"2025-07-15","mileage":110037,"service":"oil, filter","price":110.95,"invoice":"11123"},{"date":"2025-05-08","mileage":103687,"service":"oil, filter","price":113.14,"invoice":"10971"},{"date":"2024-07-15","mileage":78385,"service":"oil, filter, rotation","price":131.84,"invoice":"10123"},{"date":"2024-05-22","mileage":72980,"service":"oil, filter, fluids","price":110.4,"invoice":"9999"},{"date":"2024-03-19","mileage":65442,"service":"oil, filter, mounted balanced and valve stems, front end alignment","price":1382.31,"invoice":"9829"},{"date":"2024-01-17","mileage":59796,"service":"oil, filter","price":124.86,"invoice":"88071"},{"date":"2023-10-23","mileage":52689,"service":"oil","price":121.66,"invoice":"64271"},{"date":"2023-10-23","mileage":52689,"service":"oil","price":121.66,"invoice":"64271"},{"date":"2023-10-16","mileage":21275,"service":"oil, filter","price":109.83,"invoice":"10627"},{"date":"2023-05-11","mileage":36982,"service":"oil","price":109.91,"invoice":"72446"},{"date":"2023-02-21","mileage":30863,"service":"oil","price":86.37,"invoice":"58399"},{"date":"2022-11-16","mileage":25130,"service":"oil","price":101.14,"invoice":""},{"date":"2022-07-27","mileage":15743,"service":"oil, filter","price":108.61,"invoice":"177421"},{"date":"2022-05-19","mileage":10523,"service":"oil, chip in wid sheild","price":201.78,"invoice":"127708"}]},{"id":"PLQ 6617","plate":"PLQ 6617","vin":"1GCRDAEK3NZ623806","year":2022,"make":"Chevy","model":"Silverado","assigned_to":"Tanksley","vehicle_num":"17","cost_new":44181.0,"current_mileage":null,"records":[]},{"id":"PIV8899","plate":"PIV8899","vin":"1GTG6CEN4N1196609","year":2022,"make":"GMC","model":"Canyon","assigned_to":"George","vehicle_num":"15","cost_new":46800.0,"current_mileage":253369,"records":[{"date":"2025-02-04","mileage":77232,"service":"oil, fluides","price":113.14,"invoice":"10691"},{"date":"2024-07-12","mileage":62194,"service":"oil, filter, rotation","price":106.56,"invoice":"10119"},{"date":"2024-03-29","mileage":54317,"service":"oil, filter, fluids, tire rotation","price":131.84,"invoice":"9852"},{"date":"","mileage":46503,"service":"oil, filter","price":86.98,"invoice":"10748"},{"date":"2023-09-27","mileage":38027,"service":"tire rotation, oil, filter","price":101.48,"invoice":"10591"},{"date":"2021-11-18","mileage":253369,"service":"oil, oil filter","price":37.89,"invoice":"9302"},{"date":"2021-09-15","mileage":null,"service":"canister purge solenoid","price":186.16,"invoice":"9142"},{"date":"2021-08-12","mileage":242403,"service":"oil, oil filter, shock/strut,case oil seal, control arm, tie rod, alignment, rotation, suspension strut & coil spring","price":2754.75,"invoice":"9109"},{"date":"2023-03-14","mileage":22124,"service":"oil,filter","price":100.2,"invoice":"10159"},{"date":"2022-12-12","mileage":15112,"service":"oil, filter","price":100.2,"invoice":"10018"}]},{"id":"JUR2119","plate":"JUR2119","vin":"1GKKNRL49NZ161855","year":2022,"make":"GMC","model":"Acadia","assigned_to":"Swantek","vehicle_num":"14","cost_new":45730.0,"current_mileage":105795,"records":[{"date":"2026-02-25","mileage":105795,"service":"oil, filter- NOTE: rear tires cupping- best on front","price":104.4,"invoice":"11714"},{"date":"2025-12-11","mileage":100670,"service":"oil, air filter, rear differental service, front break","price":1322.75,"invoice":"11514"},{"date":"2025-10-27","mileage":96858,"service":"oil, fluids","price":106.7,"invoice":"11401"},{"date":"2025-08-15","mileage":90901,"service":"oil, filter, check engine oil","price":167.93,"invoice":"149086"},{"date":"2025-06-10","mileage":85761,"service":"oil, filter","price":98.89,"invoice":"11056"},{"date":"2025-04-15","mileage":80725,"service":"oil, cabin air filter","price":154.7,"invoice":"10900"},{"date":"2025-01-20","mileage":74575,"service":"oil, fluids, tire rotation","price":104.4,"invoice":"10639"},{"date":"2024-12-10","mileage":71827,"service":"scan computer, crankcase, pressure sensor code, system check, wiper blades","price":337.22,"invoice":"10538"},{"date":"2024-10-23","mileage":62264,"service":"oil, filter, fluids","price":102.2,"invoice":"10408"},{"date":"2024-07-31","mileage":62264,"service":"tires- mount and balance","price":1283.14,"invoice":"10179"},{"date":"2023-12-20","mileage":45000,"service":"oil, filter","price":86.98,"invoice":"10726"},{"date":"2023-10-20","mileage":39966,"service":"oil, filter","price":92.57,"invoice":"10635"},{"date":"2023-08-18","mileage":35033,"service":"oil, filter","price":81.96,"invoice":"10507"},{"date":"2023-06-08","mileage":30453,"service":"oil, filter","price":95.2,"invoice":"10355"},{"date":"2023-02-09","mileage":20114,"service":"oil, filter","price":104.24,"invoice":"10105"},{"date":"2022-11-18","mileage":15372,"service":"oil, drain plug","price":123.15,"invoice":"9981"}]},{"id":"PNG2511","plate":"PNG2511","vin":"3GCPDAEK9PG241631","year":2023,"make":"Chevy","model":"Silverado","assigned_to":"Cain","vehicle_num":"24","cost_new":45300.0,"current_mileage":37737,"records":[{"date":"2025-02-05","mileage":10109,"service":"oil, filter","price":110.69,"invoice":"10696"},{"date":"2024-06-07","mileage":37737,"service":"oil, filter, fluids","price":110.08,"invoice":"10042"}]},{"id":"GTM4633","plate":"GTM4633","vin":"3GNAXSEG9PL131336","year":2023,"make":"Chevy","model":"Equinox","assigned_to":"H2_Pool Car","vehicle_num":"19","cost_new":31473.0,"current_mileage":180083,"records":[{"date":"2025-10-20","mileage":44405,"service":"oil, rotation","price":121.93,"invoice":"11383"},{"date":"2025-08-04","mileage":34557,"service":"oil, filter","price":103.3,"invoice":"11183"},{"date":"2025-03-04","mileage":34557,"service":"oil, tire rotation, air filters","price":175.76,"invoice":"10782"},{"date":"2024-11-15","mileage":30601,"service":"oil, fluids, tire rotation","price":127.44,"invoice":"10477"},{"date":"2024-05-28","mileage":23281,"service":"oil, filter, fluids","price":110.08,"invoice":"10012"},{"date":"2022-12-13","mileage":180083,"service":"towing","price":159.75,"invoice":"130432"},{"date":"2022-11-18","mileage":180083,"service":"towing, diagnostics","price":241.49,"invoice":"130110"},{"date":"2021-11-16","mileage":167161,"service":"oil, oil filter, tire repair, R&R bulb","price":100.19,"invoice":"125183"},{"date":"2021-07-15","mileage":162886,"service":"oil, oil filter, tie rod, alignment, front brakes, brake flush","price":995.82,"invoice":"9057"},{"date":"2024-01-26","mileage":17655,"service":"oil, filter","price":70.29,"invoice":"10773"},{"date":"2023-08-25","mileage":10413,"service":"oil, filter, tire rotation, windshield","price":518.02,"invoice":"10524"}]},{"id":"PNE9809","plate":"PNE9809","vin":"1GCRDAEK9PZ232842","year":2023,"make":"Chevy","model":"Silverado","assigned_to":"Macik","vehicle_num":"23","cost_new":42900.0,"current_mileage":5071,"records":[{"date":"2024-05-02","mileage":5071,"service":"oil, fluids","price":119.88,"invoice":"141119"}]},{"id":"PNG2512","plate":"PNG2512","vin":"1GCPTCEK6P1178808","year":2023,"make":"Chevy","model":"Colorado","assigned_to":"Nicholson","vehicle_num":"20","cost_new":42610.0,"current_mileage":95250,"records":[{"date":"2026-04-09","mileage":95250,"service":"oil, filter, air filter, rotate tires, front and rear brakes","price":1366.17,"invoice":"11815"},{"date":"2026-01-15","mileage":87698,"service":"oil, fluids, tire rotation","price":139.53,"invoice":"11597"},{"date":"2025-09-05","mileage":75972,"service":"oil, filter, rotate tires","price":132.94,"invoice":"11275"},{"date":"2025-06-26","mileage":68313,"service":"oil, filter, rotate tires","price":133.19,"invoice":"148329"},{"date":"2025-04-09","mileage":60278,"service":"oil, air filter, cabin air filter, rotate tires,","price":255.99,"invoice":"10880"},{"date":"2025-02-14","mileage":52922,"service":"radiator hose","price":412.11,"invoice":"10735"},{"date":"2025-01-30","mileage":52922,"service":"oil, fluids, tire rotation, wiper blades","price":171.37,"invoice":"10684"},{"date":"2024-09-23","mileage":84526,"service":"oil,filter,fluids","price":109.86,"invoice":"10320"},{"date":"2024-09-10","mileage":46172,"service":"oil, filter, fluids","price":109.86,"invoice":"10285"},{"date":"2024-03-20","mileage":30278,"service":"oil, filter, fluids","price":109.87,"invoice":"9834"}]},{"id":"PNG9274","plate":"PNG9274","vin":"3GCPDAEK9PG208631","year":2023,"make":"Chevy","model":"Silverado","assigned_to":"Williams_D","vehicle_num":"25","cost_new":45300.0,"current_mileage":18512,"records":[{"date":"2025-02-07","mileage":18512,"service":"oil, filer, rotate tires","price":131.83,"invoice":"10706"}]},{"id":"KGM9190","plate":"KGM9190","vin":"3GNAXSEG1RL236309","year":2024,"make":"Chevy","model":"Equinox","assigned_to":"H3_Pool Car","vehicle_num":"22","cost_new":28200.0,"current_mileage":23910,"records":[{"date":"2025-12-15","mileage":23910,"service":"oil","price":104.4,"invoice":"11522"},{"date":"2025-07-11","mileage":16370,"service":"oil, filter, rotate tires","price":125.29,"invoice":"11117"},{"date":"2025-01-21","mileage":10328,"service":"oil, fluids","price":105.49,"invoice":"10649"},{"date":"2024-06-04","mileage":5431,"service":"oil, filter, fluids","price":102.43,"invoice":"10028"}]},{"id":"KGM9191","plate":"KGM9191","vin":"3GNAXSEG6RL174907","year":2024,"make":"Chevy","model":"Equinox","assigned_to":"H4_Pool Car","vehicle_num":"21","cost_new":28200.0,"current_mileage":21589,"records":[{"date":"2025-12-17","mileage":21589,"service":"oil, tire rotation","price":116.31,"invoice":"11529"},{"date":"2025-07-29","mileage":15194,"service":"oil, filter","price":105.49,"invoice":"11165"},{"date":"2024-11-25","mileage":10700,"service":"oil, fluids","price":103.27,"invoice":"10505"},{"date":"2024-06-10","mileage":5079,"service":"oil, filter, fluids","price":102.2,"invoice":"10044"}]},{"id":"KVH7027","plate":"KVH7027","vin":"3GNAXHEG5RL160886","year":2024,"make":"Chevy","model":"Equinox","assigned_to":"H5_Pool Car","vehicle_num":"21","cost_new":22047.0,"current_mileage":null,"records":[]},{"id":"PNM6860","plate":"PNM6860","vin":"1GCRDBEK4RZ340455","year":2024,"make":"Chevy","model":"Silverado","assigned_to":"Kiefer","vehicle_num":"","cost_new":46900.0,"current_mileage":10383,"records":[{"date":"2025-01-16","mileage":10383,"service":"oil, fluides, tire rotation","price":134.02,"invoice":"10632"}]},{"id":"PNS3880","plate":"PNS3880","vin":"1GCRDBEK9RZ310531","year":2024,"make":"Chevy","model":"Silverado","assigned_to":"Wilburn","vehicle_num":"27","cost_new":46900.0,"current_mileage":null,"records":[]},{"id":"PNM6859","plate":"PNM6859","vin":"1GCRDBEK9RZ359745","year":2024,"make":"Chevy","model":"Silverado","assigned_to":"Williams_N","vehicle_num":"26","cost_new":46900.0,"current_mileage":4998,"records":[{"date":"2025-01-10","mileage":4998,"service":"oil, fluids","price":106.03,"invoice":"10610"}]},{"id":"PIY2103","plate":"PIY2103","vin":"1GCRKBEKXSZ129207","year":2025,"make":"Chevy","model":"Silverado","assigned_to":"Schoonover","vehicle_num":"28","cost_new":46900.0,"current_mileage":172405,"records":[{"date":"2024-01-31","mileage":172405,"service":"alternator, alignment, windshield","price":547.84,"invoice":"10778"},{"date":"2023-08-22","mileage":165279,"service":"oil, filter","price":78.03,"invoice":"10514"},{"date":"2022-12-09","mileage":155173,"service":"tire rotation, oil","price":112.34,"invoice":"10014"},{"date":"2022-01-19","mileage":135557,"service":"oil, coolant check, vacuum brake booster pump","price":518.57,"invoice":"9286"},{"date":"2021-10-19","mileage":131956,"service":"oil, oil filter, rear window,oxygen sensor, catalytic converter","price":3538.73,"invoice":"9242"},{"date":"2021-06-17","mileage":126495,"service":"oil, oil filter, front rotor, front brakes, air filter, alternator","price":1459.16,"invoice":"8980"}]},{"id":"POE8215","plate":"POE8215","vin":"1GCPKKEK6TZ276701","year":2026,"make":"Chevy","model":"Silverado","assigned_to":"Berg","vehicle_num":"","cost_new":null,"current_mileage":null,"records":[]}];
+
+// ============================================================
+// STATE
+// ============================================================
+let vehicles = RAW_VEHICLES.map(v => ({
+  ...v,
+  life_threshold_years: LIFE_DEFAULTS[getVehicleType(v)].years,
+  life_threshold_miles: LIFE_DEFAULTS[getVehicleType(v)].miles,
+}));
+let sortKey = 'year';
+let sortDir = 1;
+let currentVehicleId = null;
+let editingId = null;
+
+// ============================================================
+// COMPUTED STATS
+// ============================================================
+function computeStats(v) {
+  const age = CURRENT_YEAR - v.year;
+  const threshYears = v.life_threshold_years || 15;
+  const threshMiles = v.life_threshold_miles || 250000;
+  const miles = v.current_mileage || 0;
+
+  const yearsUsed = age;
+  const milesUsed = miles;
+  const yearsPct = yearsUsed / threshYears;
+  const milesPct = milesUsed / threshMiles;
+  const lifePctUsed = Math.min(1, Math.max(yearsPct, milesPct));
+  const lifePctRemaining = Math.max(0, 1 - lifePctUsed);
+
+  // Which limit hits first
+  const yearsLeft = Math.max(0, threshYears - yearsUsed);
+  const milesLeft = Math.max(0, threshMiles - milesUsed);
+  // Convert miles left to years (using avg annual miles from records, fallback 20k)
+  const avgAnnualMiles = computeAvgAnnualMiles(v);
+  const yearsFromMiles = avgAnnualMiles > 0 ? milesLeft / avgAnnualMiles : yearsLeft;
+  const effectiveYearsRemaining = Math.min(yearsLeft, yearsFromMiles);
+
+  // Average annual maintenance
+  const avg_annual = computeAvgAnnual(v);
+  const projected_cost = Math.round(effectiveYearsRemaining * avg_annual);
+
+  let statusColor = 'green';
+  if (lifePctUsed >= 1) statusColor = 'red';
+  else if (lifePctUsed >= 0.75) statusColor = 'yellow';
+
+  return {
+    age, yearsLeft: Math.round(effectiveYearsRemaining * 10) / 10,
+    milesLeft, lifePctUsed, lifePctRemaining,
+    avg_annual: Math.round(avg_annual),
+    projected_cost, statusColor, avgAnnualMiles,
+    limitingFactor: yearsFromMiles < yearsLeft ? 'mileage' : 'age'
+  };
+}
+
+function computeAvgAnnual(v) {
+  if (!v.records || v.records.length === 0) return 0;
+  // Group costs by calendar year
+  const byYear = {};
+  v.records.forEach(r => {
+    if (!r.date) return;
+    const yr = parseInt(r.date.substring(0, 4));
+    if (isNaN(yr) || yr < 2018) return;
+    byYear[yr] = (byYear[yr] || 0) + r.price;
+  });
+  const years = Object.keys(byYear);
+  if (years.length === 0) return 0;
+  const total = Object.values(byYear).reduce((a, b) => a + b, 0);
+  // Use only years with full data (not current partial year if only 1 record)
+  const currentYrRecords = v.records.filter(r => r.date && r.date.startsWith(CURRENT_YEAR.toString()));
+  if (currentYrRecords.length <= 2 && years.includes(CURRENT_YEAR.toString()) && years.length > 1) {
+    const totalExCurrent = total - (byYear[CURRENT_YEAR] || 0);
+    return totalExCurrent / (years.length - 1);
+  }
+  return total / years.length;
+}
+
+function computeAvgAnnualMiles(v) {
+  if (!v.records || v.records.length < 2) return 20000;
+  const withMiles = v.records.filter(r => r.date && r.mileage).sort((a, b) => a.date.localeCompare(b.date));
+  if (withMiles.length < 2) return 20000;
+  const first = withMiles[0], last = withMiles[withMiles.length - 1];
+  const years = (new Date(last.date) - new Date(first.date)) / (365.25 * 24 * 3600 * 1000);
+  if (years < 0.1) return 20000;
+  const milesPerYear = (last.mileage - first.mileage) / years;
+  return Math.max(5000, Math.min(60000, milesPerYear));
+}
+
+function getYearlyTotals(v) {
+  const byYear = {};
+  (v.records || []).forEach(r => {
+    if (!r.date) return;
+    const yr = parseInt(r.date.substring(0, 4));
+    if (isNaN(yr)) return;
+    byYear[yr] = (byYear[yr] || 0) + r.price;
+  });
+  return byYear;
+}
+
+// ============================================================
+// RENDER DASHBOARD
+// ============================================================
+function renderDashboard() {
+  const stats = vehicles.map(v => ({ v, s: computeStats(v) }));
+  const totalFleet = vehicles.length;
+  const atRisk = stats.filter(x => x.s.statusColor === 'red').length;
+  const aging = stats.filter(x => x.s.statusColor === 'yellow').length;
+  const totalProjected = stats.reduce((a, x) => a + x.s.projected_cost, 0);
+  const totalSpent2025 = vehicles.reduce((a, v) => {
+    return a + (v.records || []).filter(r => r.date && r.date.startsWith('2025')).reduce((b, r) => b + r.price, 0);
+  }, 0);
+
+  document.getElementById('summaryGrid').innerHTML = `
+    <div class="stat-card"><div class="label">Active Vehicles</div><div class="value val-accent">${totalFleet}</div><div class="sub">In fleet</div></div>
+    <div class="stat-card"><div class="label">At / Over Limit</div><div class="value val-red">${atRisk}</div><div class="sub">Exceed age or mileage threshold</div></div>
+    <div class="stat-card"><div class="label">Aging (75%+ life)</div><div class="value val-yellow">${aging}</div><div class="sub">Monitor closely</div></div>
+    <div class="stat-card"><div class="label">2025 Maint. Spend</div><div class="value val-accent">$${Math.round(totalSpent2025).toLocaleString()}</div><div class="sub">All vehicles</div></div>
+    <div class="stat-card"><div class="label">Projected Remaining Cost</div><div class="value" style="font-size:1.5rem;">$${Math.round(totalProjected).toLocaleString()}</div><div class="sub">Fleet lifetime maintenance</div></div>
+  `;
+
+  // Health list
+  const sorted = [...stats].sort((a, b) => b.s.lifePctUsed - a.s.lifePctUsed);
+  document.getElementById('dashHealthList').innerHTML = sorted.slice(0, 12).map(({ v, s }) => `
+    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.4rem 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="openDetail('${v.id}')">
+      <div style="min-width:120px;font-size:0.8rem;">${v.assigned_to || v.plate}</div>
+      <div class="health-bar-wrap" style="flex:1;">
+        <div class="health-bar">
+          <div class="health-fill" style="width:${Math.min(100, s.lifePctUsed * 100).toFixed(0)}%;background:${s.statusColor === 'red' ? 'var(--red)' : s.statusColor === 'yellow' ? 'var(--yellow)' : 'var(--green)'}"></div>
+        </div>
+        <div class="health-pct">${Math.round(s.lifePctUsed * 100)}%</div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--muted);min-width:80px;text-align:right;">${v.year} ${v.make}</div>
+    </div>
+  `).join('');
+
+  // Cost list
+  const byCost = [...stats].filter(x => x.s.avg_annual > 0).sort((a, b) => b.s.avg_annual - a.s.avg_annual);
+  document.getElementById('dashCostList').innerHTML = byCost.slice(0, 10).map(({ v, s }) => `
+    <div style="display:flex;align-items:center;gap:0.75rem;padding:0.4rem 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="openDetail('${v.id}')">
+      <div style="min-width:120px;font-size:0.8rem;">${v.assigned_to || v.plate}</div>
+      <div style="flex:1;font-family:var(--condensed);font-size:1rem;font-weight:700;color:${s.avg_annual > 3000 ? 'var(--red)' : s.avg_annual > 1500 ? 'var(--yellow)' : 'var(--green)'}">$${s.avg_annual.toLocaleString()}/yr</div>
+      <div style="font-size:0.75rem;color:var(--muted);min-width:80px;text-align:right;">${v.year} ${v.make}</div>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// RENDER FLEET TABLE
+// ============================================================
+let currentSort = { key: null, dir: 1 };
+function sortTable(key) {
+  if (currentSort.key === key) currentSort.dir *= -1;
+  else { currentSort.key = key; currentSort.dir = 1; }
+  document.querySelectorAll('th').forEach(th => th.classList.remove('sort-asc', 'sort-desc'));
+  renderTable();
+}
+
+function renderTable() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const makeF = document.getElementById('makeFilter').value;
+  const statusF = document.getElementById('statusFilter').value;
+
+  let filtered = vehicles.map(v => ({ v, s: computeStats(v) })).filter(({ v, s }) => {
+    if (search && !JSON.stringify([v.assigned_to, v.plate, v.make, v.model, v.vin]).toLowerCase().includes(search)) return false;
+    if (makeF && v.make !== makeF) return false;
+    if (statusF && s.statusColor !== statusF) return false;
+    return true;
+  });
+
+  if (currentSort.key) {
+    filtered.sort((a, b) => {
+      let av = a.v[currentSort.key] ?? a.s[currentSort.key] ?? '';
+      let bv = b.v[currentSort.key] ?? b.s[currentSort.key] ?? '';
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      return av < bv ? -currentSort.dir : av > bv ? currentSort.dir : 0;
+    });
+  }
+
+  const tbody = document.getElementById('vehicleTableBody');
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" class="no-records">No vehicles match your filters.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(({ v, s }) => {
+    const pct = Math.min(100, Math.round(s.lifePctUsed * 100));
+    const barColor = s.statusColor === 'red' ? 'var(--red)' : s.statusColor === 'yellow' ? 'var(--yellow)' : 'var(--green)';
+    const badgeClass = s.statusColor === 'red' ? 'badge-red' : s.statusColor === 'yellow' ? 'badge-yellow' : 'badge-green';
+    const badgeText = s.statusColor === 'red' ? 'At Limit' : s.statusColor === 'yellow' ? 'Aging' : 'Good';
+    return `<tr onclick="openDetail('${v.id}')">
+      <td style="color:var(--muted);font-size:0.8rem;">${v.vehicle_num || '—'}</td>
+      <td><strong>${v.assigned_to || '—'}</strong></td>
+      <td>${v.year}</td>
+      <td>${v.make} ${v.model}</td>
+      <td style="font-family:monospace;font-size:0.8rem;">${v.plate}</td>
+      <td>${v.current_mileage ? v.current_mileage.toLocaleString() : '—'}</td>
+      <td>
+        <div class="health-bar-wrap">
+          <div class="health-bar"><div class="health-fill" style="width:${pct}%;background:${barColor}"></div></div>
+          <div class="health-pct">${pct}%</div>
+        </div>
+        <div style="margin-top:2px;"><span class="badge ${badgeClass}">${badgeText}</span></div>
+      </td>
+      <td style="font-family:var(--condensed);font-size:1rem;font-weight:700;color:${s.yearsLeft <= 2 ? 'var(--red)' : s.yearsLeft <= 4 ? 'var(--yellow)' : 'var(--text)'}">
+        ${s.yearsLeft > 0 ? s.yearsLeft + ' yrs' : '<span style="color:var(--red)">EOL</span>'}
+        <div style="font-size:0.65rem;color:var(--muted);font-weight:400;">${s.limitingFactor === 'mileage' ? 'mileage limit' : 'age limit'}</div>
+      </td>
+      <td style="font-family:var(--condensed);">${s.avg_annual > 0 ? '$' + s.avg_annual.toLocaleString() : '—'}</td>
+      <td style="font-family:var(--condensed);font-size:1rem;font-weight:700;">${s.projected_cost > 0 ? '$' + s.projected_cost.toLocaleString() : '—'}</td>
+      <td onclick="event.stopPropagation()">
+        <button class="btn-secondary" style="font-size:0.75rem;padding:0.25rem 0.6rem;" onclick="openDetail('${v.id}')">Detail</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// RENDER ALERTS
+// ============================================================
+function renderAlerts() {
+  const stats = vehicles.map(v => ({ v, s: computeStats(v) })).filter(x => x.s.statusColor !== 'green');
+  stats.sort((a, b) => b.s.lifePctUsed - a.s.lifePctUsed);
+
+  const html = stats.length === 0
+    ? '<div class="no-records">🎉 No vehicles currently require attention.</div>'
+    : stats.map(({ v, s }) => {
+        const icon = s.statusColor === 'red' ? '🔴' : '🟡';
+        const reason = s.lifePctUsed >= 1
+          ? `${s.limitingFactor === 'mileage' ? 'Mileage threshold exceeded' : 'Age threshold exceeded'} — consider replacement`
+          : `${Math.round(s.lifePctUsed * 100)}% of life used — ${s.yearsLeft} yrs / ${(s.milesLeft || 0).toLocaleString()} mi remaining`;
+        return `<div class="risk-item" onclick="openDetail('${v.id}')">
+          <div class="risk-icon">${icon}</div>
+          <div class="risk-text">
+            <strong>${v.year} ${v.make} ${v.model} — ${v.assigned_to}</strong>
+            <span>${reason}</span>
+          </div>
+          <div class="risk-cost" style="color:${s.statusColor === 'red' ? 'var(--red)' : 'var(--yellow)'}">
+            $${s.projected_cost.toLocaleString()} projected
+          </div>
+        </div>`;
+      }).join('');
+
+  document.getElementById('alertsPanel').innerHTML = `<div class="risk-panel">${html}</div>`;
+}
+
+// ============================================================
+// VEHICLE DETAIL MODAL
+// ============================================================
+function openDetail(id) {
+  const v = vehicles.find(x => x.id === id);
+  if (!v) return;
+  currentVehicleId = id;
+  const s = computeStats(v);
+  const yearlyTotals = getYearlyTotals(v);
+  const years = Object.keys(yearlyTotals).map(Number).sort();
+  const maxYrCost = Math.max(...Object.values(yearlyTotals), 1);
+
+  document.getElementById('modalTitle').textContent = `${v.year} ${v.make} ${v.model}`;
+  document.getElementById('modalSub').textContent = `${v.assigned_to} · Plate: ${v.plate} · VIN: ${v.vin || '—'}`;
+
+  const limitYears = v.life_threshold_years || 15;
+  const limitMiles = v.life_threshold_miles || 250000;
+  const pct = Math.min(100, Math.round(s.lifePctUsed * 100));
+  const barColor = s.statusColor === 'red' ? 'var(--red)' : s.statusColor === 'yellow' ? 'var(--yellow)' : 'var(--green)';
+
+  // Yearly bar chart
+  const barHTML = years.length > 0 ? `
+    <div class="yearly-bars">
+      ${years.map(yr => {
+        const h = Math.max(4, Math.round((yearlyTotals[yr] / maxYrCost) * 72));
+        return `<div class="year-bar-group">
+          <div class="year-bar" style="height:${h}px;background:var(--accent2);">
+            <div class="bar-tooltip">$${Math.round(yearlyTotals[yr]).toLocaleString()}</div>
+          </div>
+          <div class="year-label">${yr}</div>
+        </div>`;
+      }).join('')}
+    </div>` : '<div style="color:var(--muted);font-size:0.85rem;">No history</div>';
+
+  // Repair tool
+  const repairTool = `
+    <div class="repair-tool">
+      <div class="repair-tool-title">⚙ Repair Decision Calculator</div>
+      <div style="font-size:0.82rem;color:var(--muted);margin-bottom:0.75rem;">
+        Projected remaining maintenance: <strong style="color:var(--text);">$${s.projected_cost.toLocaleString()}</strong> over ~${s.yearsLeft} yrs
+        ${v.cost_new ? `· Original cost: <strong style="color:var(--text);">$${v.cost_new.toLocaleString()}</strong>` : ''}
+      </div>
+      <div class="repair-inputs">
+        <div class="repair-field">
+          <label>Proposed Repair Cost ($)</label>
+          <input type="number" id="repairCost_${id}" placeholder="e.g. 5000" min="0">
+        </div>
+        <div class="repair-field">
+          <label>Est. Replacement Cost ($)</label>
+          <input type="number" id="replaceCost_${id}" placeholder="e.g. 45000" min="0" value="${v.cost_new ? Math.round(v.cost_new * 1.3) : ''}">
+        </div>
+        <button class="repair-calc-btn" onclick="calcRepair('${id}')">Calculate</button>
+      </div>
+      <div class="repair-result" id="repairResult_${id}"></div>
+    </div>`;
+
+  // Recent maintenance
+  const records = [...(v.records || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const histHTML = records.length > 0
+    ? `<div class="maint-table-wrap"><table class="maint-table">
+        <thead><tr><th>Date</th><th>Mileage</th><th>Service</th><th>Cost</th><th>Invoice</th></tr></thead>
+        <tbody>
+          ${records.map(r => `<tr>
+            <td style="white-space:nowrap;">${r.date || '—'}</td>
+            <td style="font-family:monospace;">${r.mileage ? r.mileage.toLocaleString() : '—'}</td>
+            <td>${r.service}</td>
+            <td style="font-family:var(--condensed);font-weight:600;color:${r.price > 2000 ? 'var(--red)' : r.price > 500 ? 'var(--yellow)' : 'var(--text)'}">$${r.price.toLocaleString()}</td>
+            <td style="color:var(--muted);font-size:0.78rem;">${r.invoice || '—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`
+    : '<div class="no-records">No maintenance records.</div>';
+
+  document.getElementById('modalBody').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-card">
+        <div class="dc-label">Age</div>
+        <div class="dc-value">${s.age} yrs</div>
+        <div class="dc-sub">Limit: ${limitYears} yrs</div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-label">Mileage</div>
+        <div class="dc-value">${v.current_mileage ? v.current_mileage.toLocaleString() : '—'}</div>
+        <div class="dc-sub">Limit: ${limitMiles.toLocaleString()} mi</div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-label">Life Used</div>
+        <div class="dc-value" style="color:${barColor}">${pct}%</div>
+        <div class="dc-sub">
+          <div class="health-bar" style="margin-top:4px;"><div class="health-fill" style="width:${pct}%;background:${barColor}"></div></div>
+        </div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-label">Est. Years Remaining</div>
+        <div class="dc-value" style="color:${s.yearsLeft <= 2 ? 'var(--red)' : s.yearsLeft <= 4 ? 'var(--yellow)' : 'var(--green)'}">${s.yearsLeft}</div>
+        <div class="dc-sub">${s.limitingFactor === 'mileage' ? 'Mileage limit first' : 'Age limit first'}</div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-label">Avg Annual Maintenance</div>
+        <div class="dc-value">$${s.avg_annual.toLocaleString()}</div>
+        <div class="dc-sub">Based on ${Object.keys(yearlyTotals).length} yr${Object.keys(yearlyTotals).length !== 1 ? 's' : ''} of data</div>
+      </div>
+      <div class="detail-card" style="border-color:var(--accent)">
+        <div class="dc-label">Projected Remaining Cost</div>
+        <div class="dc-value val-accent">$${s.projected_cost.toLocaleString()}</div>
+        <div class="dc-sub">${s.avg_annual}/yr × ${s.yearsLeft} yrs</div>
+      </div>
+    </div>
+
+    ${repairTool}
+
+    <div class="section-header" style="margin-bottom:0.75rem;">Annual Maintenance History</div>
+    ${barHTML}
+    <div style="display:flex;gap:2rem;margin-bottom:1.5rem;font-size:0.75rem;color:var(--muted);">
+      ${years.map(yr => `<span>${yr}: $${Math.round(yearlyTotals[yr]).toLocaleString()}</span>`).join('')}
+    </div>
+
+    <div class="section-header" style="margin-bottom:0.75rem;">Service Records (${records.length})</div>
+    ${histHTML}
+
+    <div class="section-header" style="margin-top:1.5rem;margin-bottom:0.75rem;">Add Service Record</div>
+    <div class="add-service-form">
+      <div class="form-field">
+        <label>Date</label>
+        <input type="date" id="ns_date_${id}" value="${TODAY.toISOString().split('T')[0]}">
+      </div>
+      <div class="form-field">
+        <label>Mileage</label>
+        <input type="number" id="ns_miles_${id}" placeholder="${v.current_mileage || ''}">
+      </div>
+      <div class="form-field">
+        <label>Cost ($)</label>
+        <input type="number" id="ns_cost_${id}" placeholder="0.00" step="0.01">
+      </div>
+      <div></div>
+      <div class="form-field" style="grid-column:1/4;">
+        <label>Service Description</label>
+        <input type="text" id="ns_svc_${id}" placeholder="oil, filter, rotate tires...">
+      </div>
+      <div class="form-field">
+        <label>Invoice #</label>
+        <input type="text" id="ns_inv_${id}" placeholder="Invoice #">
+      </div>
+      <div style="display:flex;align-items:flex-end;">
+        <button class="btn-primary" onclick="addServiceRecord('${id}')">+ Add</button>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function calcRepair(id) {
+  const v = vehicles.find(x => x.id === id);
+  const s = computeStats(v);
+  const repair = parseFloat(document.getElementById(`repairCost_${id}`).value) || 0;
+  const replace = parseFloat(document.getElementById(`replaceCost_${id}`).value) || 0;
+  if (!repair) return;
+
+  const totalIfRepair = repair + s.projected_cost;
+  const el = document.getElementById(`repairResult_${id}`);
+
+  let cls, verdict, detail;
+  if (replace > 0) {
+    const savings = replace - totalIfRepair;
+    if (totalIfRepair < replace * 0.5) {
+      cls = 'go'; verdict = '✅ DO THE REPAIR';
+    } else if (totalIfRepair < replace * 0.8) {
+      cls = 'caution'; verdict = '⚠️ MARGINAL — CONSIDER CAREFULLY';
+    } else {
+      cls = 'no-go'; verdict = '🚫 REPLACE THE VEHICLE';
+    }
+    detail = `
+      <div><strong>Repair cost:</strong> $${repair.toLocaleString()}</div>
+      <div><strong>+ Projected remaining maintenance:</strong> $${s.projected_cost.toLocaleString()} (${s.avg_annual.toLocaleString()}/yr × ${s.yearsLeft} yrs)</div>
+      <div><strong>= Total cost to keep:</strong> $${totalIfRepair.toLocaleString()}</div>
+      <div style="margin-top:0.5rem;"><strong>vs. Replacement cost:</strong> $${replace.toLocaleString()}</div>
+      <div style="margin-top:0.25rem;font-weight:600;color:${savings > 0 ? 'var(--green)' : 'var(--red)'}">
+        ${savings > 0 ? `Repair saves $${savings.toLocaleString()} vs replacement` : `Replacement saves $${Math.abs(savings).toLocaleString()} vs repair + future maintenance`}
+      </div>`;
+  } else {
+    cls = 'caution'; verdict = '⚠️ ENTER REPLACEMENT COST FOR FULL ANALYSIS';
+    detail = `
+      <div><strong>Repair cost:</strong> $${repair.toLocaleString()}</div>
+      <div><strong>+ Projected remaining maintenance:</strong> $${s.projected_cost.toLocaleString()}</div>
+      <div><strong>= Total cost to keep vehicle:</strong> $${totalIfRepair.toLocaleString()}</div>
+      <div style="margin-top:0.4rem;color:var(--muted);">Enter an estimated replacement cost above to get a full recommendation.</div>`;
+  }
+
+  el.className = `repair-result show ${cls}`;
+  el.innerHTML = `<div class="repair-verdict">${verdict}</div><div class="repair-breakdown">${detail}</div>`;
+}
+
+function addServiceRecord(id) {
+  const v = vehicles.find(x => x.id === id);
+  const date = document.getElementById(`ns_date_${id}`).value;
+  const miles = parseFloat(document.getElementById(`ns_miles_${id}`).value) || null;
+  const cost = parseFloat(document.getElementById(`ns_cost_${id}`).value);
+  const svc = document.getElementById(`ns_svc_${id}`).value.trim();
+  const inv = document.getElementById(`ns_inv_${id}`).value.trim();
+  if (!svc || !cost) { alert('Please enter service description and cost.'); return; }
+  v.records.unshift({ date, mileage: miles, service: svc, price: cost, invoice: inv });
+  if (miles && (!v.current_mileage || miles > v.current_mileage)) v.current_mileage = miles;
+  openDetail(id);
+  renderDashboard();
+  renderTable();
+  renderAlerts();
+}
+
+// ============================================================
+// EDIT VEHICLE
+// ============================================================
+function openAddVehicle() {
+  editingId = null;
+  document.getElementById('editModalTitle').textContent = 'Add Vehicle';
+  renderEditForm(null);
+  document.getElementById('editModal').classList.add('open');
+}
+
+function openEditVehicle(id) {
+  editingId = id;
+  const v = vehicles.find(x => x.id === id);
+  document.getElementById('editModalTitle').textContent = 'Edit Vehicle';
+  renderEditForm(v);
+  document.getElementById('editModal').classList.add('open');
+}
+
+function renderEditForm(v) {
+  const types = ['truck', 'suv', 'van', 'car'];
+  const currentType = v ? getVehicleType(v) : 'truck';
+  document.getElementById('editForm').innerHTML = `
+    <div class="form-field"><label>Year</label><input type="number" id="ef_year" value="${v ? v.year : ''}" placeholder="2024"></div>
+    <div class="form-field"><label>Make</label><input type="text" id="ef_make" value="${v ? v.make : ''}" placeholder="Chevy"></div>
+    <div class="form-field"><label>Model</label><input type="text" id="ef_model" value="${v ? v.model : ''}" placeholder="Silverado"></div>
+    <div class="form-field"><label>Plate #</label><input type="text" id="ef_plate" value="${v ? v.plate : ''}"></div>
+    <div class="form-field full"><label>VIN</label><input type="text" id="ef_vin" value="${v ? v.vin : ''}"></div>
+    <div class="form-field"><label>Assigned To</label><input type="text" id="ef_assigned" value="${v ? v.assigned_to : ''}"></div>
+    <div class="form-field"><label>Vehicle #</label><input type="text" id="ef_vnum" value="${v ? v.vehicle_num : ''}"></div>
+    <div class="form-field"><label>Current Mileage</label><input type="number" id="ef_miles" value="${v && v.current_mileage ? v.current_mileage : ''}"></div>
+    <div class="form-field"><label>Cost New ($)</label><input type="number" id="ef_cost" value="${v && v.cost_new ? v.cost_new : ''}"></div>
+    <div class="form-field"><label>Vehicle Type (for defaults)</label>
+      <select id="ef_type">${types.map(t => `<option value="${t}" ${t === currentType ? 'selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('')}</select>
+    </div>
+    <div class="form-field"><label>Life Threshold — Years</label><input type="number" id="ef_thresh_years" value="${v ? v.life_threshold_years : 15}"></div>
+    <div class="form-field"><label>Life Threshold — Miles</label><input type="number" id="ef_thresh_miles" value="${v ? v.life_threshold_miles : 250000}"></div>
+  `;
+  document.getElementById('ef_type').addEventListener('change', function() {
+    const d = LIFE_DEFAULTS[this.value];
+    document.getElementById('ef_thresh_years').value = d.years;
+    document.getElementById('ef_thresh_miles').value = d.miles;
+  });
+}
+
+function saveVehicle() {
+  const year = parseInt(document.getElementById('ef_year').value);
+  const make = document.getElementById('ef_make').value.trim();
+  const model = document.getElementById('ef_model').value.trim();
+  const plate = document.getElementById('ef_plate').value.trim();
+  if (!year || !make || !model) { alert('Year, make, and model are required.'); return; }
+
+  if (editingId) {
+    const v = vehicles.find(x => x.id === editingId);
+    v.year = year; v.make = make; v.model = model;
+    v.plate = plate || v.plate;
+    v.vin = document.getElementById('ef_vin').value.trim();
+    v.assigned_to = document.getElementById('ef_assigned').value.trim();
+    v.vehicle_num = document.getElementById('ef_vnum').value.trim();
+    const m = parseFloat(document.getElementById('ef_miles').value);
+    if (!isNaN(m)) v.current_mileage = m;
+    const c = parseFloat(document.getElementById('ef_cost').value);
+    if (!isNaN(c)) v.cost_new = c;
+    v.life_threshold_years = parseInt(document.getElementById('ef_thresh_years').value) || 15;
+    v.life_threshold_miles = parseInt(document.getElementById('ef_thresh_miles').value) || 250000;
+  } else {
+    const id = plate || `new_${Date.now()}`;
+    vehicles.push({
+      id, plate, vin: document.getElementById('ef_vin').value.trim(),
+      year, make, model,
+      assigned_to: document.getElementById('ef_assigned').value.trim(),
+      vehicle_num: document.getElementById('ef_vnum').value.trim(),
+      cost_new: parseFloat(document.getElementById('ef_cost').value) || null,
+      current_mileage: parseFloat(document.getElementById('ef_miles').value) || null,
+      life_threshold_years: parseInt(document.getElementById('ef_thresh_years').value) || 15,
+      life_threshold_miles: parseInt(document.getElementById('ef_thresh_miles').value) || 250000,
+      records: []
+    });
+  }
+  closeModal('editModal');
+  renderAll();
+}
+
+// ============================================================
+// MODAL / TAB UTILS
+// ============================================================
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  event.target.classList.add('active');
+}
+
+document.getElementById('detailModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal('detailModal');
+});
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal('editModal');
+});
+
+// ============================================================
+// INIT
+// ============================================================
+function renderAll() {
+  renderDashboard();
+  renderTable();
+  renderAlerts();
+}
+
+function init() {
+  // Populate make filter
+  const makes = [...new Set(vehicles.map(v => v.make).filter(Boolean))].sort();
+  const sel = document.getElementById('makeFilter');
+  makes.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m; opt.textContent = m;
+    sel.appendChild(opt);
+  });
+
+  document.getElementById('fleetCount').textContent = `${vehicles.length} active vehicles`;
+  document.getElementById('lastUpdated').textContent = new Date().toLocaleDateString();
+
+  renderAll();
+}
+
+init();
+</script>
+</body>
+</html>
