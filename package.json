@@ -1,0 +1,15 @@
+{
+  "name": "vehicle-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Vehicle tracker with SQLite-backed Node.js server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
+  }
+}
