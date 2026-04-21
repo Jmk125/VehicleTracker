@@ -154,7 +154,18 @@
     background: var(--card); border: 1px solid var(--accent); border-radius: 8px;
     padding: 1.25rem 1.5rem; margin-bottom: 1.5rem;
   }
+  .repair-tool-header { display:flex; align-items:center; justify-content:space-between; gap:0.75rem; margin-bottom:0.5rem; }
   .repair-tool-title { font-family: var(--condensed); font-size: 1rem; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; margin-bottom: 1rem; text-transform: uppercase; }
+  .repair-help-btn {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 999px;
+    width: 28px; height: 28px; cursor: pointer; font-size: 0.95rem; line-height: 1;
+  }
+  .repair-help-panel {
+    margin-bottom: 0.9rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.8rem 0.9rem; font-size: 0.8rem; color: var(--muted); line-height: 1.6; display: none;
+  }
+  .repair-help-panel.show { display: block; }
+  .repair-help-panel strong { color: var(--text); }
   .repair-inputs { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end; }
   .repair-field { display: flex; flex-direction: column; gap: 0.3rem; }
   .repair-field label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
@@ -963,21 +974,77 @@ function openDetail(id) {
   // Repair tool
   const repairTool = `
     <div class="repair-tool">
-      <div class="repair-tool-title">⚙ Repair Decision Calculator</div>
+      <div class="repair-tool-header">
+        <div class="repair-tool-title" style="margin-bottom:0;">🧠 Keep vs Replace Cost Calculator</div>
+        <button class="repair-help-btn" title="How this works" onclick="toggleRepairHelp('${id}')">🧠</button>
+      </div>
+      <div class="repair-help-panel" id="repairHelp_${id}">
+        <strong>How this works:</strong><br>
+        This tool compares the future cost of keeping a vehicle versus replacing it. It ignores money already spent and focuses only on what is likely to happen next. The recommendation is based on projected maintenance, repair costs, remaining useful life, replacement cost, residual value, and optional downtime impact. In general, if the future cost per mile (or per year) of keeping the vehicle is higher than replacing it, replacement becomes the better option. Borderline cases should be reviewed with judgment, not blindly followed.
+      </div>
       <div style="font-size:0.82rem;color:var(--muted);margin-bottom:0.75rem;">
-        ${s.lifePctUsed >= 1
-          ? `<span style="color:var(--red);font-weight:600;">Vehicle is at/past lifecycle threshold.</span> Calculator uses a 5-year maintenance look-ahead ($${(s.avg_annual * 5).toLocaleString()} estimated).`
-          : `Projected remaining maintenance: <strong style="color:var(--text);">$${s.projected_cost.toLocaleString()}</strong> over ~${s.yearsLeft} yrs`}
-        ${v.cost_new ? ` · Original cost: <strong style="color:var(--text);">$${v.cost_new.toLocaleString()}</strong>` : ''}
+        Enter future-looking values only (sunk costs ignored). Use downtime and threshold when needed.
       </div>
       <div class="repair-inputs">
         <div class="repair-field">
-          <label>Proposed Repair Cost ($)</label>
-          <input type="number" id="repairCost_${id}" placeholder="e.g. 5000" min="0">
+          <label>Keep: Remaining Life Miles *</label>
+          <input type="number" id="keepMiles_${id}" placeholder="e.g. 45000" min="1" value="${Math.max(1, Math.round(s.milesLeft || 0))}">
         </div>
         <div class="repair-field">
-          <label>Est. Replacement Cost ($)</label>
-          <input type="number" id="replaceCost_${id}" placeholder="e.g. 45000" min="0" value="${v.cost_new ? Math.round(v.cost_new * 1.3) : ''}">
+          <label>Keep: Remaining Life Years *</label>
+          <input type="number" id="keepYears_${id}" placeholder="e.g. 3" min="0.1" step="0.1" value="${Math.max(0.1, Number(s.yearsLeft || 1).toFixed(1))}">
+        </div>
+        <div class="repair-field">
+          <label>Keep: Future Maintenance ($) *</label>
+          <input type="number" id="keepMaint_${id}" placeholder="e.g. 9000" min="0" value="${Math.max(0, Math.round(s.projected_cost || 0))}">
+        </div>
+        <div class="repair-field">
+          <label>Keep: Major Repairs ($) *</label>
+          <input type="number" id="keepMajor_${id}" placeholder="e.g. 6000" min="0" value="0">
+        </div>
+        <div class="repair-field">
+          <label>Keep: End Residual Value ($) *</label>
+          <input type="number" id="keepResidual_${id}" placeholder="e.g. 1500" min="0" value="0">
+        </div>
+        <div class="repair-field">
+          <label>Replace: Purchase Price ($) *</label>
+          <input type="number" id="replacePrice_${id}" placeholder="e.g. 52000" min="0" value="${v.cost_new ? Math.round(v.cost_new * 1.3) : ''}">
+        </div>
+        <div class="repair-field">
+          <label>Replace: Life Miles *</label>
+          <input type="number" id="replaceMiles_${id}" placeholder="e.g. 200000" min="1" value="${Math.round(v.life_threshold_miles || 250000)}">
+        </div>
+        <div class="repair-field">
+          <label>Replace: Life Years *</label>
+          <input type="number" id="replaceYears_${id}" placeholder="e.g. 12" min="0.1" step="0.1" value="${Math.round(v.life_threshold_years || 12)}">
+        </div>
+        <div class="repair-field">
+          <label>Replace: Maintenance ($) *</label>
+          <input type="number" id="replaceMaint_${id}" placeholder="e.g. 14000" min="0" value="${Math.round((v.life_threshold_years || 12) * s.avg_annual * 0.8)}">
+        </div>
+        <div class="repair-field">
+          <label>Replace: Major Repairs ($) *</label>
+          <input type="number" id="replaceMajor_${id}" placeholder="e.g. 3000" min="0" value="0">
+        </div>
+        <div class="repair-field">
+          <label>Replace: Residual Value ($) *</label>
+          <input type="number" id="replaceResidual_${id}" placeholder="e.g. 8000" min="0" value="0">
+        </div>
+        <div class="repair-field">
+          <label>Downtime Included</label>
+          <input type="checkbox" id="includeDowntime_${id}" style="width:auto;height:18px;" onchange="toggleDowntimeFields('${id}')">
+        </div>
+        <div class="repair-field">
+          <label>Keep: Annual Downtime ($)</label>
+          <input type="number" id="keepDowntime_${id}" placeholder="e.g. 2500" min="0" value="0" disabled>
+        </div>
+        <div class="repair-field">
+          <label>Replace: Annual Downtime ($)</label>
+          <input type="number" id="replaceDowntime_${id}" placeholder="e.g. 800" min="0" value="0" disabled>
+        </div>
+        <div class="repair-field">
+          <label>Borderline Threshold (%)</label>
+          <input type="number" id="thresholdPct_${id}" placeholder="e.g. 8" min="0" max="100" step="0.5" value="8">
         </div>
         <button class="repair-calc-btn" onclick="calcRepair('${id}')">Calculate</button>
       </div>
@@ -1098,67 +1165,116 @@ function openDetail(id) {
   document.getElementById('detailModal').classList.add('open');
 }
 
+function toggleRepairHelp(id) {
+  const el = document.getElementById(`repairHelp_${id}`);
+  if (!el) return;
+  el.classList.toggle('show');
+}
+
+function toggleDowntimeFields(id) {
+  const include = document.getElementById(`includeDowntime_${id}`)?.checked;
+  const keep = document.getElementById(`keepDowntime_${id}`);
+  const repl = document.getElementById(`replaceDowntime_${id}`);
+  if (!keep || !repl) return;
+  keep.disabled = !include;
+  repl.disabled = !include;
+}
+
+function readRepairNumber(id, key, { required = true, min = 0 } = {}) {
+  const el = document.getElementById(`${key}_${id}`);
+  if (!el) return { ok: false, message: `Missing input: ${key}` };
+  const raw = el.value;
+  if (raw === '' && required) return { ok: false, message: 'Please complete all required fields.' };
+  if (raw === '') return { ok: true, value: 0 };
+  const value = parseFloat(raw);
+  if (!Number.isFinite(value)) return { ok: false, message: 'Invalid numeric value provided.' };
+  if (value < min) return { ok: false, message: `Values cannot be below ${min}.` };
+  return { ok: true, value };
+}
+
 function calcRepair(id) {
-  const v = vehicles.find(x => x.id === id);
-  const s = computeStats(v);
-  const repair = parseFloat(document.getElementById(`repairCost_${id}`).value) || 0;
-  const replace = parseFloat(document.getElementById(`replaceCost_${id}`).value) || 0;
-  if (!repair) return;
+  const resultEl = document.getElementById(`repairResult_${id}`);
+  if (!resultEl) return;
 
-  const isEOL = s.lifePctUsed >= 1;
-  // EOL vehicles have yearsLeft=0, so projected_cost=0 — that makes repair always look cheap.
-  // Instead use a 5-year look-ahead: the vehicle will keep accumulating costs even past its threshold.
-  const lookAheadYears = isEOL ? 5 : s.yearsLeft;
-  const projMaint = Math.round(s.avg_annual * lookAheadYears);
-  const totalIfRepair = repair + projMaint;
-  const el = document.getElementById(`repairResult_${id}`);
+  const includeDowntime = !!document.getElementById(`includeDowntime_${id}`)?.checked;
+  const specs = [
+    ['keepMiles', { min: 1 }],
+    ['keepYears', { min: 0.1 }],
+    ['keepMaint', { min: 0 }],
+    ['keepMajor', { min: 0 }],
+    ['keepResidual', { min: 0 }],
+    ['replacePrice', { min: 0 }],
+    ['replaceMiles', { min: 1 }],
+    ['replaceYears', { min: 0.1 }],
+    ['replaceMaint', { min: 0 }],
+    ['replaceMajor', { min: 0 }],
+    ['replaceResidual', { min: 0 }],
+    ['thresholdPct', { min: 0 }],
+    ['keepDowntime', { min: 0, required: false }],
+    ['replaceDowntime', { min: 0, required: false }],
+  ];
 
-  // Tighter thresholds for EOL vehicles — replacement should be favored more strongly
-  const goThresh     = isEOL ? 0.35 : 0.5;
-  const cautionThresh = isEOL ? 0.6  : 0.8;
-
-  const eolBanner = isEOL
-    ? `<div style="background:rgba(239,68,68,0.1);border:1px solid var(--red);border-radius:6px;padding:0.5rem 0.75rem;margin-bottom:0.65rem;font-size:0.82rem;">
-        <strong style="color:var(--red);">Vehicle is at or past its lifecycle threshold.</strong>
-        Maintenance is projected over a 5-year window since remaining life is 0. Replacement should be weighted heavily.
-       </div>` : '';
-
-  const maintLabel = isEOL
-    ? `5-yr look-ahead (at/past lifecycle)`
-    : `projected remaining life`;
-
-  let cls, verdict, detail;
-  if (replace > 0) {
-    const savings = replace - totalIfRepair;
-    if (totalIfRepair < replace * goThresh) {
-      cls = 'go';
-      verdict = isEOL ? '⚠️ REPAIR MAY BE JUSTIFIED — MONITOR CLOSELY' : '✅ DO THE REPAIR';
-    } else if (totalIfRepair < replace * cautionThresh) {
-      cls = 'caution'; verdict = '⚠️ MARGINAL — CONSIDER CAREFULLY';
-    } else {
-      cls = 'no-go'; verdict = '🚫 REPLACE THE VEHICLE';
+  const values = {};
+  for (const [key, opts] of specs) {
+    const r = readRepairNumber(id, key, opts);
+    if (!r.ok) {
+      resultEl.className = 'repair-result show caution';
+      resultEl.innerHTML = `<div class="repair-verdict">⚠️ INPUT NEEDED</div><div class="repair-breakdown">${r.message}</div>`;
+      return;
     }
-    detail = `
-      ${eolBanner}
-      <div><strong>Repair cost:</strong> $${repair.toLocaleString()}</div>
-      <div><strong>+ Projected maintenance:</strong> $${projMaint.toLocaleString()} ($${s.avg_annual.toLocaleString()}/yr × ${lookAheadYears} yrs — ${maintLabel})</div>
-      <div><strong>= Total cost to keep:</strong> $${totalIfRepair.toLocaleString()}</div>
-      <div style="margin-top:0.5rem;"><strong>vs. Replacement cost:</strong> $${replace.toLocaleString()}</div>
-      <div style="margin-top:0.25rem;font-weight:600;color:${savings > 0 ? 'var(--green)' : 'var(--red)'}">
-        ${savings > 0 ? `Repair saves $${savings.toLocaleString()} vs replacement` : `Replacement saves $${Math.abs(savings).toLocaleString()} vs repair + future maintenance`}
-      </div>`;
-  } else {
-    cls = 'caution'; verdict = '⚠️ ENTER REPLACEMENT COST FOR FULL ANALYSIS';
-    detail = `
-      ${eolBanner}
-      <div><strong>Repair cost:</strong> $${repair.toLocaleString()}</div>
-      <div><strong>+ Projected maintenance:</strong> $${projMaint.toLocaleString()} ($${s.avg_annual.toLocaleString()}/yr × ${lookAheadYears} yrs — ${maintLabel})</div>
-      <div><strong>= Total cost to keep vehicle:</strong> $${totalIfRepair.toLocaleString()}</div>
-      <div style="margin-top:0.4rem;color:var(--muted);">Enter an estimated replacement cost above to get a full recommendation.</div>`;
+    values[key] = r.value;
   }
 
-  el.className = `repair-result show ${cls}`;
-  el.innerHTML = `<div class="repair-verdict">${verdict}</div><div class="repair-breakdown">${detail}</div>`;
+  const keepDowntimeTotal = includeDowntime ? values.keepDowntime * values.keepYears : 0;
+  const replaceDowntimeTotal = includeDowntime ? values.replaceDowntime * values.replaceYears : 0;
+
+  const keepFutureTotal = values.keepMaint + values.keepMajor + keepDowntimeTotal - values.keepResidual;
+  const replaceFutureTotal = values.replacePrice + values.replaceMaint + values.replaceMajor + replaceDowntimeTotal - values.replaceResidual;
+
+  const keepCostPerMile = keepFutureTotal / values.keepMiles;
+  const keepCostPerYear = keepFutureTotal / values.keepYears;
+  const replaceCostPerMile = replaceFutureTotal / values.replaceMiles;
+  const replaceCostPerYear = replaceFutureTotal / values.replaceYears;
+
+  const thresholdRatio = values.thresholdPct / 100;
+  const diffPerMile = keepCostPerMile - replaceCostPerMile;
+  const absDiff = Math.abs(diffPerMile);
+  const baseline = Math.max(keepCostPerMile, replaceCostPerMile, 0.00001);
+  const relativeDiff = absDiff / baseline;
+
+  let verdict = '🟡 MONITOR / BORDERLINE';
+  let cls = 'caution';
+  let why = `Costs are within ${(thresholdRatio * 100).toFixed(1)}% threshold, so this is borderline.`;
+  if (relativeDiff > thresholdRatio) {
+    if (diffPerMile < 0) {
+      verdict = '✅ KEEP';
+      cls = 'go';
+      why = `Keep recommended because projected keep cost per mile is ${(Math.abs(diffPerMile) / replaceCostPerMile * 100).toFixed(1)}% lower than replacement.`;
+    } else {
+      verdict = '🚫 REPLACE';
+      cls = 'no-go';
+      why = `Replace recommended because projected keep cost per mile exceeds replacement by ${(Math.abs(diffPerMile) / keepCostPerMile * 100).toFixed(1)}%.`;
+    }
+  }
+
+  const fmtCurrency = n => `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  const fmtRate = n => `$${n.toFixed(2)}`;
+  const downtimeText = includeDowntime
+    ? `Included (keep ${fmtCurrency(keepDowntimeTotal)}, replace ${fmtCurrency(replaceDowntimeTotal)}).`
+    : 'Not included.';
+
+  resultEl.className = `repair-result show ${cls}`;
+  resultEl.innerHTML = `
+    <div class="repair-verdict">${verdict}</div>
+    <div class="repair-breakdown">
+      <div><strong>Keep cost per mile:</strong> ${fmtRate(keepCostPerMile)} /mi</div>
+      <div><strong>Replace cost per mile:</strong> ${fmtRate(replaceCostPerMile)} /mi</div>
+      <div><strong>Keep cost per year:</strong> ${fmtCurrency(keepCostPerYear)} /yr</div>
+      <div><strong>Replace cost per year:</strong> ${fmtCurrency(replaceCostPerYear)} /yr</div>
+      <div><strong>Downtime:</strong> ${downtimeText}</div>
+      <div style="margin-top:0.45rem;"><strong>Why:</strong> ${why}</div>
+      <div style="margin-top:0.45rem;color:var(--muted);">Only future marginal costs are included. Sunk costs are ignored.</div>
+    </div>`;
 }
 
 let editingRecord = { vehicleId: null, idx: null };
