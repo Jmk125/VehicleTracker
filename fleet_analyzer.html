@@ -553,7 +553,8 @@ function computeStats(v) {
   const effectiveYearsRemaining = Math.min(yearsLeft, yearsFromMiles);
 
   // Average annual maintenance
-  const avg_annual = computeAvgAnnual(v);
+  const annualWindow = getRecentCompleteAnnualWindow(v);
+  const avg_annual = annualWindow.avgAnnual;
   const projected_cost = Math.round(effectiveYearsRemaining * avg_annual);
 
   let statusColor = 'green';
@@ -570,26 +571,26 @@ function computeStats(v) {
   };
 }
 
-function computeAvgAnnual(v) {
-  if (!v.records || v.records.length === 0) return 0;
-  // Group costs by calendar year
+function getRecentCompleteAnnualWindow(v) {
+  if (!v.records || v.records.length === 0) return { avgAnnual: 0, yearsUsed: [] };
+
   const byYear = {};
   v.records.forEach(r => {
     if (!r.date) return;
     const yr = parseInt(r.date.substring(0, 4));
-    if (isNaN(yr) || yr < 2018) return;
+    if (isNaN(yr) || yr < 2018 || yr >= CURRENT_YEAR) return;
     byYear[yr] = (byYear[yr] || 0) + r.price;
   });
-  const years = Object.keys(byYear);
-  if (years.length === 0) return 0;
-  const total = Object.values(byYear).reduce((a, b) => a + b, 0);
-  // Use only years with full data (not current partial year if only 1 record)
-  const currentYrRecords = v.records.filter(r => r.date && r.date.startsWith(CURRENT_YEAR.toString()));
-  if (currentYrRecords.length <= 2 && years.includes(CURRENT_YEAR.toString()) && years.length > 1) {
-    const totalExCurrent = total - (byYear[CURRENT_YEAR] || 0);
-    return totalExCurrent / (years.length - 1);
-  }
-  return total / years.length;
+
+  const yearsUsed = Object.keys(byYear).map(Number).sort((a, b) => b - a).slice(0, 3);
+  if (yearsUsed.length === 0) return { avgAnnual: 0, yearsUsed: [] };
+
+  const total = yearsUsed.reduce((sum, yr) => sum + (byYear[yr] || 0), 0);
+  return { avgAnnual: total / yearsUsed.length, yearsUsed };
+}
+
+function computeAvgAnnual(v) {
+  return getRecentCompleteAnnualWindow(v).avgAnnual;
 }
 
 function computeAvgAnnualMiles(v) {
@@ -951,6 +952,7 @@ function openDetail(id) {
   currentVehicleId = id;
   const s = computeStats(v);
   const yearlyTotals = getYearlyTotals(v);
+  const annualWindow = getRecentCompleteAnnualWindow(v);
   const years = Object.keys(yearlyTotals).map(Number).sort();
   const maxYrCost = Math.max(...Object.values(yearlyTotals), 1);
 
@@ -1125,7 +1127,11 @@ function openDetail(id) {
       <div class="detail-card">
         <div class="dc-label">Avg Annual Maintenance</div>
         <div class="dc-value">$${s.avg_annual.toLocaleString()}</div>
-        <div class="dc-sub">Based on ${Object.keys(yearlyTotals).length} yr${Object.keys(yearlyTotals).length !== 1 ? 's' : ''} of data</div>
+        <div class="dc-sub">${
+          annualWindow.yearsUsed.length
+            ? `Based on last ${annualWindow.yearsUsed.length} complete yr${annualWindow.yearsUsed.length !== 1 ? 's' : ''} (${annualWindow.yearsUsed.slice().reverse().join(', ')})`
+            : 'No complete year of maintenance yet'
+        }</div>
       </div>
       <div class="detail-card" style="border-color:var(--accent)">
         <div class="dc-label">Projected Remaining Cost</div>
