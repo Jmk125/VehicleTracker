@@ -618,6 +618,11 @@ function getEffectiveMileage(v) {
   return v.current_mileage || null;
 }
 
+function formatMileageShort(mileage) {
+  if (mileage == null || mileage <= 0) return 'N/A';
+  return `${Math.round(mileage).toLocaleString()} M`;
+}
+
 function getYearlyTotals(v) {
   const byYear = {};
   (v.records || []).forEach(r => {
@@ -671,7 +676,7 @@ function renderDashboard() {
     <div style="display:flex;align-items:center;gap:0.75rem;padding:0.4rem 0;border-bottom:1px solid var(--border);cursor:pointer;" onclick="openDetail('${v.id}')">
       <div style="min-width:120px;font-size:0.8rem;">${v.assigned_to || v.plate}</div>
       <div style="flex:1;font-family:var(--condensed);font-size:1rem;font-weight:700;color:${s.avg_annual > 3000 ? 'var(--red)' : s.avg_annual > 1500 ? 'var(--yellow)' : 'var(--green)'}">$${s.avg_annual.toLocaleString()}/yr</div>
-      <div style="font-size:0.75rem;color:var(--muted);min-width:80px;text-align:right;">${v.year} ${v.make}</div>
+      <div style="font-size:0.75rem;color:var(--muted);min-width:160px;text-align:right;">${v.year} ${v.make} | ${formatMileageShort(s.mileage)}</div>
     </div>
   `).join('');
 
